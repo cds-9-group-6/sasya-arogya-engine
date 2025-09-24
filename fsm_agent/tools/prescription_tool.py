@@ -40,7 +40,7 @@ class PrescriptionTool(BaseTool):
     args_schema: type[BaseModel] = PrescriptionInput
     
     # Declare the ollama_base_url field properly
-    ollama_base_url: str = Field(default="http://localhost:8081", exclude=True)
+    prescription_engine_url: str = Field(default_factory=lambda: os.getenv("PRESCRIPTION_ENGINE_URL", "http://localhost:8081"), exclude=True)
     
     def __init__(self, **data):
         super().__init__(**data)
@@ -50,14 +50,14 @@ class PrescriptionTool(BaseTool):
         """Initialize HTTP client and validate Ollama connection"""
         try:
             # Test connection to Ollama server
-            response = requests.get(f"{self.ollama_base_url}/health", timeout=5)
+            response = requests.get(f"{self.prescription_engine_url}/health", timeout=5)
             if response.status_code == 200:
-                logger.info("✅ Ollama HTTP connection established successfully")
+                logger.info("✅ Prescription Engine HTTP connection established successfully")
             else:
                 logger.warning(f"Ollama server responded with status {response.status_code}")
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to connect to Ollama server at {self.ollama_base_url}: {str(e)}")
-            logger.error("💡 Suggestion: Ensure Ollama is running on port 8081")
+            logger.error(f"Failed to connect to Prescription Engine  at {self.prescription_engine_url}: {str(e)}")
+            logger.error("💡 Suggestion: Ensure Prescription Engine is running and accessible, or set PRESCRIPTION_ENGINE_URL environment variable")
     
     async def _arun(self, mlflow_manager=None, **kwargs) -> Dict[str, Any]:
         """Async implementation"""
@@ -91,7 +91,7 @@ class PrescriptionTool(BaseTool):
             
             # Test Ollama connection availability
             try:
-                requests.get(f"{self.ollama_base_url}/api/tags", timeout=2)
+                requests.get(f"{self.prescription_engine_url}/api/tags", timeout=2)
             except requests.exceptions.RequestException:
                 error_msg = "Ollama server not available"
                 if mlflow_manager:
@@ -151,7 +151,7 @@ class PrescriptionTool(BaseTool):
                 
                 # Make HTTP request to /query/metrics endpoint
                 response = requests.post(
-                    f"{self.ollama_base_url}/query/metrics",
+                    f"{self.prescription_engine_url}/query/metrics",
                     json=request_payload,
                     headers={"Content-Type": "application/json"},
                     timeout=30
