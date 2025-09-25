@@ -1,7 +1,7 @@
 """
 Prescription Tool for LangGraph Workflow
 
-This tool generates treatment prescriptions using Ollama HTTP API for recommendations.
+This tool generates treatment prescriptions using Prescription Engine HTTP API for recommendations.
 """
 
 import asyncio
@@ -54,7 +54,7 @@ class PrescriptionTool(BaseTool):
             if response.status_code == 200:
                 logger.info("✅ Prescription Engine HTTP connection established successfully")
             else:
-                logger.warning(f"Ollama server responded with status {response.status_code}")
+                logger.warning(f"Prescription Engine responded with status {response.status_code}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to connect to Prescription Engine  at {self.prescription_engine_url}: {str(e)}")
             logger.error("💡 Suggestion: Ensure Prescription Engine is running and accessible, or set PRESCRIPTION_ENGINE_URL environment variable")
@@ -93,9 +93,9 @@ class PrescriptionTool(BaseTool):
             try:
                 requests.get(f"{self.prescription_engine_url}/api/tags", timeout=2)
             except requests.exceptions.RequestException:
-                error_msg = "Ollama server not available"
+                error_msg = "Prescription Engine not available"
                 if mlflow_manager:
-                    mlflow_manager.log_error(session_id, "ollama_unavailable", error_msg)
+                    mlflow_manager.log_error(session_id, "prescription_engine_unavailable", error_msg)
                 # Fallback to rule-based recommendations
                 return self._generate_fallback_prescription(**kwargs)
             
@@ -137,9 +137,9 @@ class PrescriptionTool(BaseTool):
             
             # Query Ollama via HTTP API
             try:
-                logger.info(f"🔍 Querying Ollama with metadata - plant: {plant_type}, season: {season}, location: {location}, disease: {disease_name}")
+                logger.info(f"🔍 Querying Prescription Engine with metadata - plant: {plant_type}, season: {season}, location: {location}, disease: {disease_name}")
                 
-                # Prepare the request payload for /query/metrics endpoint
+                # Prepare the request payload for /query/treatment endpoint
                 request_payload = {
                     "query": query,
                     "plant_type": plant_type,
@@ -149,7 +149,7 @@ class PrescriptionTool(BaseTool):
                     "session_id": session_id
                 }
                 
-                # Make HTTP request to /query/metrics endpoint
+                # Make HTTP request to /query/treatment endpoint
                 response = requests.post(
                     f"{self.prescription_engine_url}/query/metrics",
                     json=request_payload,
@@ -162,17 +162,26 @@ class PrescriptionTool(BaseTool):
                 
                 # Extract response content
                 response_data = response.json()
-                rag_response = response_data.get("response", response_data.get("answer", str(response_data)))
                 
-                # Parse RAG response into structured format
-                prescription_data = self._parse_rag_response(rag_response, **kwargs)
+                # Check if the response was successful
+                if not response_data.get("success", False):
+                    raise Exception(f"Prescription Engine returned unsuccessful response: {response_data}")
+                
+                # Extract the treatment data
+                treatment_data = response_data.get("treatment", {})
+                if not treatment_data:
+                    raise Exception("No treatment data found in response")
+                
+                # Use the structured response directly instead of parsing text
+                prescription_data = self._parse_structured_response(treatment_data, response_data, **kwargs)
+                rag_response = response_data.get("raw_response", str(response_data))  # Keep for debugging
                 
                 # Log prescription generation success
                 if mlflow_manager:
                     try:
                         import mlflow
                         mlflow.log_metric("prescription_generation_success", 1)
-                        mlflow.log_param("prescription_final_source", "ollama_http")
+                        mlflow.log_param("prescription_final_source", "prescription_engine_http")
                     except Exception as e:
                         logger.warning(f"Failed to log prescription success: {e}")
                 
@@ -180,15 +189,15 @@ class PrescriptionTool(BaseTool):
                 return prescription_data
                 
             except Exception as e:
-                logger.warning(f"Ollama HTTP query failed: {str(e)}. Using fallback prescription.")
+                logger.warning(f"Prescription Engine HTTP query failed: {str(e)}. Using fallback prescription.")
                 if mlflow_manager:
                     try:
                         import mlflow
-                        mlflow_manager.log_error(session_id, "ollama_query_failed", str(e))
+                        mlflow_manager.log_error(session_id, "prescription_engine_query_failed", str(e))
                         mlflow.log_metric("prescription_generation_success", 0)
                         mlflow.log_param("prescription_final_source", "fallback")
                     except Exception as log_e:
-                        logger.warning(f"Failed to log Ollama failure: {log_e}")
+                        logger.warning(f"Failed to log Prescription Engine failure: {log_e}")
                 return self._generate_fallback_prescription(**kwargs)
                 
         except Exception as e:
@@ -300,6 +309,127 @@ class PrescriptionTool(BaseTool):
         except Exception as e:
             logger.error(f"Error parsing RAG response: {str(e)}")
             return self._generate_fallback_prescription(**kwargs)
+    
+    def _parse_structured_response(self, treatment_data: Dict[str, Any], response_data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        """
+        Parse structured response from Prescription Engine into prescription data
+        
+        Args:
+            treatment_data: Structured treatment data from the response
+            response_data: Full response data for metadata
+            **kwargs: Original input parameters
+        
+        Returns:
+            Structured prescription data compatible with existing interface
+        """
+        try:
+            # Extract diagnosis information
+            diagnosis = treatment_data.get("diagnosis", {})
+            
+            # Extract medicine recommendations and convert to treatments format
+            medicine_recs = treatment_data.get("medicine_recommendations", {})
+            treatments = []
+            
+            # Add primary treatment
+            primary = medicine_recs.get("primary_treatment", {})
+            if primary:
+                treatments.append({
+                    "name": primary.get("medicine_name", "Unknown Medicine"),
+                    "type": "Chemical",
+                    "application": primary.get("application_method", "As directed"),
+                    "dosage": primary.get("dosage", "As per label"),
+                    "frequency": primary.get("frequency", "As needed"),
+                    "duration": primary.get("duration", "Until improvement"),
+                    "precautions": primary.get("precautions", [])
+                })
+            
+            # Add secondary treatment
+            secondary = medicine_recs.get("secondary_treatment", {})
+            if secondary:
+                treatments.append({
+                    "name": secondary.get("medicine_name", "Secondary Medicine"),
+                    "type": "Chemical",
+                    "application": secondary.get("application_method", "As directed"),
+                    "dosage": secondary.get("dosage", "As per label"),
+                    "frequency": secondary.get("frequency", "As needed"),
+                    "duration": secondary.get("duration", "Until improvement"),
+                    "when_to_use": secondary.get("when_to_use")
+                })
+            
+            # Add organic alternatives
+            organic_alts = medicine_recs.get("organic_alternatives", [])
+            for organic in organic_alts:
+                treatments.append({
+                    "name": organic.get("name", "Organic Treatment"),
+                    "type": "Organic",
+                    "application": organic.get("application", "As directed"),
+                    "dosage": organic.get("preparation", "As per instructions"),
+                    "frequency": "As needed"
+                })
+            
+            # Extract prevention measures
+            prevention = treatment_data.get("prevention", {})
+            preventive_measures = []
+            preventive_measures.extend(prevention.get("cultural_practices", []))
+            preventive_measures.extend(prevention.get("crop_management", []))
+            preventive_measures.extend(prevention.get("environmental_controls", []))
+            
+            # Extract additional notes
+            additional_notes = treatment_data.get("additional_notes", {})
+            notes_parts = []
+            if additional_notes.get("weather_considerations"):
+                notes_parts.append(f"Weather: {additional_notes['weather_considerations']}")
+            if additional_notes.get("crop_stage_specific"):
+                notes_parts.append(f"Crop Stage: {additional_notes['crop_stage_specific']}")
+            if additional_notes.get("regional_considerations"):
+                notes_parts.append(f"Regional: {additional_notes['regional_considerations']}")
+            if additional_notes.get("follow_up"):
+                notes_parts.append(f"Follow-up: {additional_notes['follow_up']}")
+            
+            notes = ". ".join(notes_parts)
+            
+            return {
+                # Core data compatible with existing interface
+                "treatments": treatments,
+                "preventive_measures": preventive_measures,
+                "notes": notes,
+                "disease_name": diagnosis.get("disease_name", kwargs.get("disease_name")),
+                "plant_type": kwargs.get("plant_type"),
+                "severity": diagnosis.get("severity", kwargs.get("severity", "Medium")),
+                "location": kwargs.get("location"),
+                "season": kwargs.get("season"),
+                
+                # Extended structured data from new response
+                "diagnosis": diagnosis,
+                "immediate_treatment": treatment_data.get("immediate_treatment", {}),
+                "weekly_treatment_plan": treatment_data.get("weekly_treatment_plan", {}),
+                "medicine_recommendations": medicine_recs,
+                "prevention": prevention,
+                "additional_notes": additional_notes,
+                
+                # Metadata from response
+                "collection_used": response_data.get("collection_used"),
+                "query_time": response_data.get("query_time"),
+                "parsing_success": response_data.get("parsing_success", True),
+                "raw_response": response_data.get("raw_response"),
+                "structured_response": True  # Flag to indicate this is structured data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error parsing structured response: {str(e)}")
+            # Fallback to basic structure with available data
+            return {
+                "treatments": self._get_default_treatments(kwargs.get("disease_name", "")),
+                "preventive_measures": self._get_default_preventive_measures(),
+                "notes": f"Error parsing response: {str(e)}",
+                "disease_name": kwargs.get("disease_name"),
+                "plant_type": kwargs.get("plant_type"),
+                "severity": kwargs.get("severity", "Medium"),
+                "location": kwargs.get("location"),
+                "season": kwargs.get("season"),
+                "error": str(e),
+                "structured_response": False
+            }
     
     def _generate_fallback_prescription(self, **kwargs) -> Dict[str, Any]:
         """
