@@ -12,8 +12,8 @@ try:
     from ..workflow_state import WorkflowState, add_message_to_state, set_error
     from ...tools.vendor_tool import VendorTool
 except ImportError:
-    from engine.fsm_agent.core.workflow_state import WorkflowState, add_message_to_state, set_error
-    from engine.fsm_agent.tools.vendor_tool import VendorTool
+    from ..workflow_state import WorkflowState, add_message_to_state, set_error
+    from ...tools.vendor_tool import VendorTool
 
 logger = logging.getLogger(__name__)
 

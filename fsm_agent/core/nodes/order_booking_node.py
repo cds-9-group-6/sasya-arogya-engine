@@ -12,7 +12,7 @@ from .base_node import BaseNode
 try:
     from ..workflow_state import WorkflowState, add_message_to_state, set_error
 except ImportError:
-    from engine.fsm_agent.core.workflow_state import WorkflowState, add_message_to_state, set_error
+    from ..workflow_state import WorkflowState, add_message_to_state, set_error
 
 logger = logging.getLogger(__name__)
 

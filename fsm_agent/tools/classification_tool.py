@@ -428,7 +428,7 @@ Important:
                     
                     # Calculate and log additional metrics
                     try:
-                        from engine.core.classification_metrics import ClassificationMetrics
+                        from core.classification_metrics import ClassificationMetrics
                         import mlflow
                         additional_metrics = ClassificationMetrics.calculate_decision_metrics(
                             cnn_result, llava_result, final_result, decision_data.get("similarity")

@@ -12,8 +12,8 @@ try:
     from ..workflow_state import WorkflowState, add_message_to_state, set_error, can_retry
     from ...tools.prescription_tool import PrescriptionTool
 except ImportError:
-    from engine.fsm_agent.core.workflow_state import WorkflowState, add_message_to_state, set_error, can_retry
-    from engine.fsm_agent.tools.prescription_tool import PrescriptionTool
+    from ..workflow_state import WorkflowState, add_message_to_state, set_error, can_retry
+    from ...tools.prescription_tool import PrescriptionTool
 
 logger = logging.getLogger(__name__)
 

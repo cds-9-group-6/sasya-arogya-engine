@@ -8,12 +8,8 @@ from typing import Dict, Any, Optional
 
 from .base_node import BaseNode
 
-try:
-    from ..workflow_state import WorkflowState, add_message_to_state, set_error
-    from ...tools.context_extractor import ContextExtractorTool
-except ImportError:
-    from engine.fsm_agent.core.workflow_state import WorkflowState, add_message_to_state, set_error
-    from engine.fsm_agent.tools.context_extractor import ContextExtractorTool
+from ..workflow_state import WorkflowState, add_message_to_state, set_error
+from ...tools.context_extractor import ContextExtractorTool
 
 logger = logging.getLogger(__name__)
 

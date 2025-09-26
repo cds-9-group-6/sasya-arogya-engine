@@ -16,8 +16,8 @@ try:
     from ..workflow_state import WorkflowState, add_message_to_state, set_error, can_retry
     from ...tools.classification_tool import ClassificationTool
 except ImportError:
-    from engine.fsm_agent.core.workflow_state import WorkflowState, add_message_to_state, set_error, can_retry
-    from engine.fsm_agent.tools.classification_tool import ClassificationTool
+    from ..workflow_state import WorkflowState, add_message_to_state, set_error, can_retry
+    from ...tools.classification_tool import ClassificationTool
 
 logger = logging.getLogger(__name__)
 

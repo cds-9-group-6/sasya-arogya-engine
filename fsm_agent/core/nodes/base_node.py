@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 try:
     from ..workflow_state import WorkflowState, update_state_node
 except ImportError:
-    from engine.fsm_agent.core.workflow_state import WorkflowState, update_state_node
+    from ..workflow_state import WorkflowState, update_state_node
 
 logger = logging.getLogger(__name__)
 

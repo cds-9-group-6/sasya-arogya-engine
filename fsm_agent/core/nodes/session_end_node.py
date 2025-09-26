@@ -10,8 +10,8 @@ try:
     from .base_node import BaseNode
 except ImportError:
     # Fallback to absolute imports if relative imports fail
-    from engine.fsm_agent.core.workflow_state import WorkflowState, add_message_to_state, mark_complete, update_state_node
-    from engine.fsm_agent.core.nodes.base_node import BaseNode
+    from ..workflow_state import WorkflowState, add_message_to_state, mark_complete, update_state_node
+    from .base_node import BaseNode
 
 logger = logging.getLogger(__name__)
 

@@ -12,8 +12,8 @@ try:
     from ..workflow_state import WorkflowState, add_message_to_state, set_error, mark_complete
     from ...tools.attention_overlay_tool import AttentionOverlayTool
 except ImportError:
-    from engine.fsm_agent.core.workflow_state import WorkflowState, add_message_to_state, set_error, mark_complete
-    from engine.fsm_agent.tools.attention_overlay_tool import AttentionOverlayTool
+    from ..workflow_state import WorkflowState, add_message_to_state, set_error, mark_complete
+    from ...tools.attention_overlay_tool import AttentionOverlayTool
 
 logger = logging.getLogger(__name__)
 
