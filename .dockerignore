@@ -1,0 +1,110 @@
+# Dockerignore file to optimize build context and speed up builds
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+README*
+docs/
+*.txt
+!requirements.txt
+
+# Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.tox/
+htmlcov/
+.nox/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+.tmp/
+temp/
+*.tmp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+backup/
+*.backup
+*.bak
+
+# Images (unless specifically needed)
+images/
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment files (security)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Docker files (avoid recursive copying)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Package manager files that aren't needed in runtime
+pyproject.toml
+uv.lock
+poetry.lock
+Pipfile
+Pipfile.lock
+
+# Node modules if any
+node_modules/
+
+# Test files
+test_*.py
+*_test.py
+tests/
