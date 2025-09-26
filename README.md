@@ -96,16 +96,6 @@ uv pip compile pyproject.toml -o requirements.txt
 
 
 ```bash
-#start the llama 3.1 8b model container
-
-
-# start the agentic api
-podman run -it --rm -p 8080:8080 -e OLLAMA_HOST=http://192.168.0.110:11434 localhost/engine-arm64:v2
-
-```
-
-
-```bash
 # install mlflow in your local setup
 uv add mlflow
 # or
@@ -114,7 +104,15 @@ pip install mlflow
 # check pyproject.toml file for "mlflow>=3.3.2",
 cat pyproject.toml G "mlflow"                         
 
-
-
-
 ```
+
+
+## Steps to follow to start the containered app
+
+1. Start prescription
+  1. cd to prescription-rag folder. Make sure you have appropriate .env file.
+  1. Follow the readme.md file and start ollama, chromadb and prescription pod
+1. create appropriate .env file in sasya-arogya-engine folder
+1. start the container: 
+  1. podman run -it --rm --name engine -p 8080:8080 --env-file .env localhost/engine:arm64-v6.1
+

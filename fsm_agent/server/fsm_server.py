@@ -42,12 +42,6 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan"""
     global agent
     
-    # Set TensorFlow threading environment variables to prevent mutex issues
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TensorFlow logging
-    os.environ['OMP_NUM_THREADS'] = '1'       # Limit OpenMP threads
-    os.environ['TF_NUM_INTEROP_THREADS'] = '1'
-    os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
-
     # Initialize agent on startup (MLflow is now initialized within the workflow)
     llm_config = {
         "model": os.getenv("OLLAMA_MODEL", "llama3.1:8b"),
