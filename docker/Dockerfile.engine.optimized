@@ -1,0 +1,69 @@
+# Optimized Dockerfile for faster builds and local package caching - Platform-specific
+# 
+# Build commands (choose platform-specific):
+# ARM64: podman build --platform linux/arm64 --build-arg BASE_TAG=arm64-3.12-slim --build-arg PLATFORM=arm64 --build-arg VERSION=v6 -t engine:arm64-v6 -f ./docker/Dockerfile.engine.optimized .
+# AMD64: podman build --platform linux/amd64 --build-arg BASE_TAG=amd64-3.12-slim --build-arg PLATFORM=amd64 --build-arg VERSION=v6 -t engine:amd64-v6 -f ./docker/Dockerfile.engine.optimized .
+
+ARG BASE_TAG
+ARG PLATFORM
+ARG VERSION
+ARG PIP_CACHE_DIR=/pip-cache
+
+FROM localhost/python:${BASE_TAG}
+
+# Install system dependencies (cached layer - only changes when dependencies change)
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-dri \
+    libgl1-mesa-dev \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgstreamer1.0-0 \
+    # Add git for some pip packages that need it
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+WORKDIR /app
+
+# Create pip cache directory
+RUN mkdir -p /pip-cache
+
+# Copy only requirements first (for better layer caching)
+COPY ./requirements.txt .
+
+# Install Python dependencies with cache mounting and optimizations
+# This layer will be cached unless requirements.txt changes
+RUN --mount=type=cache,target=/pip-cache \
+    pip install --cache-dir=/pip-cache \
+    --no-deps \
+    --requirement requirements.txt \
+    && pip install --cache-dir=/pip-cache \
+    --requirement requirements.txt
+
+# Alternative approach for environments that don't support --mount=type=cache
+# RUN pip install --cache-dir=/pip-cache -r requirements.txt
+
+# Copy application code (separate layer - changes frequently)
+COPY ./fsm_agent ./fsm_agent
+COPY ./ml ./ml
+COPY ./core ./core
+
+# Create empty __init__.py for package structure
+RUN touch ./__init__.py
+
+# Add platform and version labels for identification
+LABEL sasya.platform=${PLATFORM}
+LABEL sasya.type="optimized"
+LABEL sasya.version=${VERSION}
+
+# Create non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8080
+
+CMD ["python", "./fsm_agent/run_fsm_server.py", "--host", "0.0.0.0", "--port", "8080"]
