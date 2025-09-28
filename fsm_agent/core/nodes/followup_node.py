@@ -4,6 +4,7 @@ Handles additional questions and navigation using LLM-based intent analysis
 """
 
 import logging
+import re
 from typing import Dict, Any
 
 from .base_node import BaseNode
@@ -64,6 +65,16 @@ class FollowupNode(BaseNode):
                 logger.info(f"🚫 Preventing infinite loop: Vendor query just completed, showing results instead of re-querying")
                 self._handle_vendor_complete_followup(state)
                 
+            # If insurance node just prompted for missing info, handle appropriately
+            elif previous_node == "insurance" and state.get("requires_user_input"):
+                logger.info(f"🚫 Preventing infinite loop: Insurance node just prompted for missing info")
+                await self._handle_insurance_missing_info_followup(state)
+                
+            # If we just completed insurance operation and have results, don't re-query
+            elif previous_node == "insurance" and (state.get("insurance_premium_details") or state.get("insurance_recommendations")):
+                logger.info(f"🚫 Preventing infinite loop: Insurance operation just completed, showing results instead of re-querying")
+                self._handle_insurance_complete_followup(state)
+                
             else:
                 # Normal flow: analyze user intent for new requests
                 logger.info(f"📋 Normal followup: Analyzing user intent (previous_node: {previous_node})")
@@ -90,6 +101,9 @@ class FollowupNode(BaseNode):
                     
                 elif followup_intent["action"] == "direct_response":
                     self._handle_direct_response_action(state, followup_intent)
+                    
+                elif followup_intent["action"] == "insurance":
+                    self._handle_insurance_action(state)
                     
                 else:
                     self._handle_general_help_action(state)
@@ -210,6 +224,11 @@ class FollowupNode(BaseNode):
             # User reached completion but didn't say goodbye, show ongoing support
             self._show_ongoing_support(state)
     
+    def _handle_insurance_action(self, state: WorkflowState) -> None:
+        """Handle insurance action - route to insurance node"""
+        logger.info("🏦 Routing to insurance node for crop insurance services")
+        state["next_action"] = "insurance"
+    
     def _handle_direct_response_action(self, state: WorkflowState, followup_intent: Dict[str, Any]) -> None:
         """Handle direct response action"""
         # GENERIC ARCHITECTURAL FIX: Use metadata to control streaming behavior
@@ -228,6 +247,114 @@ class FollowupNode(BaseNode):
         # Route to completion to show enhanced response
         state["next_action"] = "await_user_input"
         state["requires_user_input"] = True
+    
+    async def _handle_insurance_missing_info_followup(self, state: WorkflowState) -> None:
+        """Handle followup after insurance node prompted for missing information"""
+        user_message = state.get("user_message", "").lower()
+        
+        # Check if user provided missing insurance information
+        missing_info_provided = False
+        updated_context = {}
+        
+        # Extract crop information from user message
+        common_crops = ["rice", "wheat", "corn", "maize", "cotton", "sugarcane", "soybean", "tomato", 
+                       "potato", "onion", "garlic", "chili", "pepper", "cabbage", "carrot"]
+        
+        for crop in common_crops:
+            if crop in user_message:
+                updated_context["crop"] = crop.title()
+                missing_info_provided = True
+                break
+        
+        # Check for area/hectare information
+        area_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:hectare|hectares|ha|acre|acres)', user_message)
+        if area_match:
+            area = float(area_match.group(1))
+            # Convert acres to hectares if needed
+            if 'acre' in user_message:
+                area = area * 0.404686  # Convert acres to hectares
+            updated_context["area_hectare"] = area
+            missing_info_provided = True
+        
+        # Check for state/location information
+        indian_states = ["andhra pradesh", "assam", "bihar", "gujarat", "haryana", "karnataka", 
+                        "kerala", "madhya pradesh", "maharashtra", "punjab", "rajasthan", 
+                        "tamil nadu", "uttar pradesh", "west bengal"]
+        
+        for state_name in indian_states:
+            if state_name in user_message:
+                updated_context["state"] = state_name.title()
+                missing_info_provided = True
+                break
+        
+        if missing_info_provided:
+            # Update state with extracted information
+            logger.info(f"🔄 Extracted missing insurance info: {updated_context}")
+            try:
+                for key, value in updated_context.items():
+                    state[key] = value
+                
+                # Clear requires_user_input and route back to insurance
+                state["requires_user_input"] = False
+                state["next_action"] = "insurance"
+            except Exception as e:
+                logger.error(f"Error updating state with extracted info: {str(e)}")
+                logger.error(f"State type: {type(state)}, Updated context: {updated_context}")
+                # Fallback: analyze new intent instead
+                followup_intent = await self._analyze_followup_intent(state)
+                self._handle_direct_response_action(state, followup_intent)
+            
+        else:
+            # User didn't provide missing info - analyze their new intent
+            logger.info("📋 User didn't provide missing insurance info, analyzing new intent")
+            followup_intent = await self._analyze_followup_intent(state)
+            
+            # Handle the new intent (don't force insurance)
+            if followup_intent["action"] == "classify":
+                await self._handle_classify_action(state)
+            elif followup_intent["action"] == "prescribe":
+                await self._handle_prescribe_action(state)
+            elif followup_intent["action"] == "show_vendors":
+                self._handle_show_vendors_action(state)
+            elif followup_intent["action"] == "direct_response":
+                self._handle_direct_response_action(state, followup_intent)
+            else:
+                # Default to general help if unclear
+                self._handle_general_help_action(state)
+            
+            # Clear requires_user_input since we're handling their request
+            state["requires_user_input"] = False
+    
+    def _handle_insurance_complete_followup(self, state: WorkflowState) -> None:
+        """Handle followup after insurance operation completed successfully"""
+        # Show the results without re-executing insurance
+        insurance_premium = state.get("insurance_premium_details", {})
+        insurance_recommendations = state.get("insurance_recommendations", {})
+        
+        if insurance_premium:
+            # Premium was calculated - show completion message
+            premium_amount = insurance_premium.get("total_premium", "N/A")
+            crop = state.get("crop", state.get("plant_type", "crop"))
+            response = f"✅ **Insurance Premium Calculated Successfully**\n\nYour {crop} insurance premium: ₹{premium_amount}\n\nWhat would you like to do next?"
+            
+        elif insurance_recommendations:
+            # Recommendations were provided
+            response = "✅ **Insurance Recommendations Ready**\n\nYour insurance recommendations are complete. What would you like to do next?"
+            
+        else:
+            # Fallback message
+            response = "✅ **Insurance Service Completed**\n\nYour insurance request has been processed. What would you like to do next?"
+        
+        state["assistant_response"] = response
+        state["response_status"] = "final"
+        state["stream_immediately"] = True
+        state["stream_in_state_update"] = False
+        
+        add_message_to_state(state, "assistant", response)
+        
+        # Route to completion to show enhanced response  
+        state["next_action"] = "completed"
+        state["requires_user_input"] = False  # Clear the flag
     
     def _handle_general_help_action(self, state: WorkflowState) -> None:
         """Handle general help action"""
@@ -337,6 +464,12 @@ What would you like to know more about?"""
             
             if state.get("vendor_options"):
                 context_info.append(f"- Already have vendor information")
+            
+            if state.get("insurance_recommendations"):
+                context_info.append(f"- Already have insurance recommendations")
+            
+            if state.get("insurance_premium_details"):
+                context_info.append(f"- Already calculated insurance premium")
                 
             context_str = "\n".join(context_info) if context_info else "- No previous workflow steps completed"
             
@@ -367,7 +500,12 @@ What would you like to know more about?"""
     
     def _build_followup_intent_prompt(self, user_message: str, context_str: str, state: WorkflowState) -> str:
         """Build the followup intent analysis prompt"""
-        return f"""You are analyzing a user's followup message in a plant disease diagnosis system.
+        return f"""You are analyzing a user's followup message in a comprehensive agricultural assistance system that provides:
+- Plant disease diagnosis and classification
+- Treatment recommendations and prescriptions  
+- Agricultural vendor/supplier services
+- Crop insurance services (premium calculation, policy recommendations, company comparisons)
+- General agricultural guidance
 
 Current workflow context:
 {context_str}
@@ -375,7 +513,7 @@ Current workflow context:
 User's message: "{user_message}"
 
 Analyze the user's intent and respond with ONLY a JSON object containing:
-- action: One of ["classify", "prescribe", "show_vendors", "attention_overlay", "restart", "complete", "direct_response"]
+- action: One of ["classify", "prescribe", "show_vendors", "insurance", "attention_overlay", "restart", "complete", "direct_response"]
 - response: (string) If action is "direct_response", provide a helpful answer to their question. Otherwise, leave empty.
 - overlay_type: (string) If action is "attention_overlay", specify "show_overlay" or "overlay_info". Otherwise, leave empty.
 - confidence: (number 0-1) How confident you are in this classification.
@@ -383,18 +521,23 @@ Analyze the user's intent and respond with ONLY a JSON object containing:
 Action meanings:
 - "classify": User wants disease diagnosis/classification
 - "prescribe": User wants treatment recommendations, dosage info, application instructions  
-- "show_vendors": User wants to find/buy products or vendors
+- "show_vendors": User wants to find/buy AGRICULTURAL PRODUCTS (pesticides, fertilizers, equipment, supplies) or vendors
+- "insurance": User wants crop insurance services (premium calculation, recommendations, companies, coverage) - WE PROVIDE THESE SERVICES
 - "attention_overlay": User wants to see diagnostic attention overlay/heatmap
 - "restart": User wants to start over with new diagnosis
 - "complete": User is done/saying goodbye
 - "direct_response": Answer their question directly (for general agriculture questions, clarifications, etc.)
 
 Guidelines:
-1. If they ask about dosage, application, treatment instructions - use "prescribe" if no prescription exists, otherwise "direct_response" with detailed answer using available prescription data
-2. If they ask general agriculture questions (soil, weather, growing tips) - use "direct_response"  
-3. If they're asking for clarification about previous results - use "direct_response"
-4. Be flexible with natural language - "yes give me dosage" means they want prescription/dosage info
-5. Consider context - if they have prescription data and ask about dosage, provide direct_response with that info
+1. INSURANCE REQUESTS: If they ask about insurance, premium, coverage, policy, insurance cost, insurance companies - ALWAYS use "insurance" action (WE PROVIDE FULL INSURANCE SERVICES)
+2. TREATMENT REQUESTS: If they ask about dosage, application, treatment instructions - use "prescribe" if no prescription exists, otherwise "direct_response" with detailed answer using available prescription data
+3. VENDOR REQUESTS: If they ask about buying AGRICULTURAL PRODUCTS (pesticides, fertilizers, equipment, supplies), purchasing suppliers, vendors, where to get farming products - use "show_vendors" (NOT for insurance buying)
+4. CLASSIFICATION REQUESTS: If they ask about disease diagnosis, upload new image, identify disease - use "classify"
+5. General agriculture questions (soil, weather, growing tips) - use "direct_response"  
+6. Clarifications about previous results - use "direct_response"
+7. Be flexible with natural language - "yes give me dosage" means they want prescription/dosage info
+8. IMPORTANT: For insurance keywords (insurance, premium, coverage, cost, policy, companies), ALWAYS route to "insurance" - never use "direct_response"
+9. CRITICAL: "Buy insurance" = "insurance" action, "Buy pesticides" = "show_vendors" action - Context matters!
 
 Current prescription data available: {bool(state.get("prescription_data"))}
 

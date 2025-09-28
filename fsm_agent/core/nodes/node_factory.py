@@ -17,6 +17,7 @@ from .followup_node import FollowupNode
 from .completed_node import CompletedNode
 from .session_end_node import SessionEndNode
 from .error_node import ErrorNode
+from .insurance_node import InsuranceNode
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class NodeFactory:
             "vendor_query": VendorQueryNode,
             "show_vendors": ShowVendorsNode,
             "order_booking": OrderBookingNode,
+            "insurance": InsuranceNode,
             "followup": FollowupNode,
             "completed": CompletedNode,
             "session_end": SessionEndNode,
