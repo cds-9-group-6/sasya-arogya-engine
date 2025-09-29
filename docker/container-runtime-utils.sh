@@ -2,6 +2,7 @@
 
 # Container Runtime Utilities - Shared functions for Docker/Podman compatibility
 # This file provides common functions for detecting and working with both Docker and Podman
+# Adapted for Sasya Chikitsa Ollama model builds
 
 # Global variables
 CONTAINER_RUNTIME=""
