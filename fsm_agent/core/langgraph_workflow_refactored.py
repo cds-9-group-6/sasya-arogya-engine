@@ -35,6 +35,7 @@ try:
     from ..tools.vendor_tool import VendorTool
     from ..tools.context_extractor import ContextExtractorTool
     from ..tools.attention_overlay_tool import AttentionOverlayTool
+    from ..tools.insurance_tool import InsuranceTool
 except ImportError:
     # Fallback to absolute imports if relative imports fail
     from fsm_agent.core.workflow_state import (
@@ -51,6 +52,7 @@ except ImportError:
     from fsm_agent.tools.vendor_tool import VendorTool
     from fsm_agent.tools.context_extractor import ContextExtractorTool
     from fsm_agent.tools.attention_overlay_tool import AttentionOverlayTool
+    from fsm_agent.tools.insurance_tool import InsuranceTool
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,7 @@ class DynamicPlanningWorkflow:
             "vendor": VendorTool(),
             "context_extractor": ContextExtractorTool(),
             "attention_overlay": AttentionOverlayTool(),
+            "insurance": InsuranceTool(),
         }
         
         # Initialize node factory with tools and LLM

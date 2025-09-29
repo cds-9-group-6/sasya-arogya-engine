@@ -32,6 +32,7 @@ try:
     from ..tools.vendor_tool import VendorTool
     from ..tools.context_extractor import ContextExtractorTool
     from ..tools.attention_overlay_tool import AttentionOverlayTool
+    from ..tools.insurance_tool import InsuranceTool
 except ImportError:
     # Fallback to absolute imports if relative imports fail
     from fsm_agent.core.workflow_state import (
@@ -49,6 +50,7 @@ except ImportError:
     from fsm_agent.tools.vendor_tool import VendorTool
     from fsm_agent.tools.context_extractor import ContextExtractorTool
     from fsm_agent.tools.attention_overlay_tool import AttentionOverlayTool
+    from fsm_agent.tools.insurance_tool import InsuranceTool
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +93,7 @@ class DynamicPlanningWorkflow:
             "vendor": VendorTool(),
             "context_extractor": ContextExtractorTool(),
             "attention_overlay": AttentionOverlayTool(),
+            "insurance": InsuranceTool(),
         }
         
         # Initialize node factory with tools, LLM, and MLflow manager
@@ -129,6 +132,7 @@ class DynamicPlanningWorkflow:
             self._route_from_initial,
             {
                 "classifying": "classifying",
+                "insurance": "insurance",
                 "followup": "followup",
                 "error": "error",
                 "completed": "completed"
@@ -192,6 +196,18 @@ class DynamicPlanningWorkflow:
         )
         
         workflow.add_conditional_edges(
+            "insurance",
+            self._route_from_insurance,
+            {
+                "prescribing": "prescribing",
+                "vendor_query": "vendor_query",
+                "followup": "followup",
+                "completed": "completed",
+                "error": "error"
+            }
+        )
+        
+        workflow.add_conditional_edges(
             "followup",
             self._route_from_followup,
             {
@@ -200,6 +216,7 @@ class DynamicPlanningWorkflow:
                 "prescribing": "prescribing",
                 "vendor_query": "vendor_query",
                 "show_vendors": "show_vendors",
+                "insurance": "insurance",
                 "completed": "completed",
                 "session_end": "session_end",
                 "error": "error"
@@ -254,6 +271,8 @@ class DynamicPlanningWorkflow:
         
         if next_action == "classify":
             return "classifying"
+        elif next_action == "insurance":
+            return "insurance"
         elif next_action == "error":
             return "error"
         else:
@@ -338,6 +357,21 @@ class DynamicPlanningWorkflow:
         else:
             return "completed"
     
+    async def _route_from_insurance(self, state: WorkflowState) -> str:
+        """Route from insurance node"""
+        next_action = state.get("next_action", "followup")
+        
+        if next_action == "prescribing":
+            return "prescribing"
+        elif next_action == "vendor_query":
+            return "vendor_query"
+        elif next_action == "completed":
+            return "completed"
+        elif next_action == "error":
+            return "error"
+        else:
+            return "followup"
+    
     async def _route_from_followup(self, state: WorkflowState) -> str:
         """Route from followup node - FIXED to end workflow but keep session active"""
         next_action = state.get("next_action", "completed")
@@ -348,6 +382,7 @@ class DynamicPlanningWorkflow:
             "classify": "classifying",
             "prescribe": "prescribing",
             "show_vendors": "show_vendors",
+            "insurance": "insurance",
             "session_end": "session_end",  # Only explicit user goodbye ends session
             "error": "error",
             "await_user_input": "completed"  # FIXED: Direct responses should go to completed but preserve the answer
