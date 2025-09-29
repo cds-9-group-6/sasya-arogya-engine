@@ -4,7 +4,7 @@ Final state with follow-up questions
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from datetime import datetime
 
 from .base_node import BaseNode
@@ -44,20 +44,23 @@ class CompletedNode(BaseNode):
         existing_response = state.get("assistant_response", "")
         previous_node = state.get("previous_node", "")
         
-        # Generate follow-up questions based on previous state and context
-        follow_ups = self._generate_follow_ups(state)
+        # Analyze what services were actually used to generate contextual completion
+        services_used = self._analyze_services_used(state)
+        completion_context = self._create_completion_context(state, services_used)
         
-        # CRITICAL FIX: Only use existing response if it's a direct followup answer
-        # Don't wrap followup responses - they're already clean and targeted
+        # Generate relevant follow-ups based on actual services used
+        follow_ups = self._generate_contextual_follow_ups(state, services_used)
+        
+        # Create contextual completion message based on what actually happened
         if existing_response and existing_response.strip() and previous_node == "followup":
             # Direct followup response - use as-is, just add minimal follow-up options
             completion_message = self._create_clean_followup_response(existing_response, follow_ups)
-        elif existing_response and existing_response.strip() and previous_node in ["classifying", "prescribing"]:
+        elif existing_response and existing_response.strip():
             # Tool workflow completed - add follow-up options without ugly formatting
             completion_message = self._create_clean_workflow_completion(existing_response, follow_ups)
         else:
-            # No direct response - show standard completion message
-            completion_message = self._create_ongoing_support_message(follow_ups)
+            # No direct response - show contextual completion message based on services used
+            completion_message = self._create_contextual_completion_message(services_used, completion_context, follow_ups)
         
         # Store the enhanced completion response
         state["assistant_response"] = completion_message
@@ -76,34 +79,162 @@ class CompletedNode(BaseNode):
         
         return state
     
-    def _create_ongoing_support_message(self, follow_ups: List[str]) -> str:
-        """Create completion message for ongoing support"""
-        completion_message = f"""✅ **YOUR PLANT CHECKUP STATUS**
-
-🌱 **WHAT WE DID**
-We checked your plant and gave you treatment advice. Our smart system analyzed your plant photo and provided helpful recommendations.
-
-🚀 **WHAT TO DO NEXT**"""
+    def _analyze_services_used(self, state: WorkflowState) -> Dict[str, bool]:
+        """Analyze which services were actually used in this session"""
+        return {
+            "classification": bool(state.get("classification_results") or state.get("disease_name")),
+            "prescription": bool(state.get("prescription_data") or state.get("treatment_recommendations")),
+            "insurance": bool(state.get("insurance_context") or state.get("insurance_premium_details") 
+                           or state.get("insurance_recommendations") or state.get("insurance_companies")),
+            "vendors": bool(state.get("vendor_options") or state.get("selected_vendor"))
+        }
+    
+    def _create_completion_context(self, state: WorkflowState, services_used: Dict[str, bool]) -> Dict[str, Any]:
+        """Create context summary of what happened in this session"""
+        context = {
+            "services_count": sum(services_used.values()),
+            "services_list": [service for service, used in services_used.items() if used]
+        }
         
+        # Extract key details for each service used
+        if services_used["classification"]:
+            context["disease_name"] = state.get("disease_name", "disease")
+            context["plant_type"] = state.get("plant_type", "plant")
+            
+        if services_used["prescription"]:
+            treatments = state.get("treatment_recommendations", [])
+            context["treatment_count"] = len(treatments)
+            
+        if services_used["insurance"]:
+            context["farmer_name"] = state.get("farmer_name", "Farmer")
+            context["crop"] = state.get("plant_type") or "your crop"
+            context["insurance_type"] = "recommendation" if state.get("insurance_recommendations") else "premium calculation"
+            
+        if services_used["vendors"]:
+            vendors = state.get("vendor_options", [])
+            context["vendor_count"] = len(vendors)
+        
+        return context
+    
+    def _create_contextual_completion_message(self, services_used: Dict[str, bool], context: Dict[str, Any], follow_ups: List[str]) -> str:
+        """Create appropriate completion message based on services actually used"""
+        services_list = context["services_list"]
+        services_count = context["services_count"]
+        
+        if services_count == 0:
+            # No specific services used - general help
+            title = "✅ **HOW CAN I HELP YOU?**"
+            summary = "I'm here to help with plant disease diagnosis, treatment recommendations, crop insurance, and finding suppliers."
+        elif services_count == 1:
+            # Single service used
+            service = services_list[0]
+            title, summary = self._get_single_service_summary(service, context)
+        else:
+            # Multiple services used
+            title = f"✅ **YOUR {services_count} SERVICES COMPLETED**"
+            summary = self._get_multiple_services_summary(services_list, context)
+        
+        # Build the completion message
+        completion_message = f"{title}\n\n🌱 **WHAT WE DID**\n{summary}"
+        
+        # Add next steps
+        completion_message += "\n\n🚀 **WHAT TO DO NEXT**"
         if follow_ups:
             for i, follow_up in enumerate(follow_ups, 1):
-                completion_message += f"""
-{i}. {follow_up}"""
+                completion_message += f"\n{i}. {follow_up}"
         else:
-            completion_message += """
-1. Check your plant daily to see if it's getting better
-2. Keep following the care tips we gave you
-3. Take new photos if you see more problems"""
+            completion_message += "\n1. Ask me any questions about your results\n2. Upload new images for analysis\n3. Get additional recommendations"
         
-        completion_message += f"""
-
-💚 **WE'RE HERE TO HELP**
-• Take new photos anytime if you see more problems
-• Ask questions about how the treatment is working
-• Find out where to buy medicines for your plants
-• Get tips for different seasons and weather"""
+        # Add contextual help section
+        completion_message += self._get_contextual_help_section(services_used)
         
         return completion_message
+    
+    def _get_single_service_summary(self, service: str, context: Dict[str, Any]) -> Tuple[str, str]:
+        """Get title and summary for single service completion"""
+        if service == "classification":
+            disease = context.get("disease_name", "disease")
+            plant = context.get("plant_type", "plant") or "plant"
+            return f"✅ **YOUR {plant.upper()} DIAGNOSIS COMPLETE**", f"We analyzed your plant and identified {disease}. Our smart system provided detailed diagnostic information."
+            
+        elif service == "prescription":
+            treatment_count = context.get("treatment_count", 0)
+            return "✅ **YOUR TREATMENT PLAN READY**", f"We provided you with {treatment_count} treatment options and preventive measures for your plant's condition."
+            
+        elif service == "insurance":
+            farmer = context.get("farmer_name", "Farmer")
+            crop = context.get("crop", "crop")
+            insurance_type = context.get("insurance_type", "insurance") or "services"
+            return f"✅ **YOUR CROP INSURANCE {insurance_type.upper()} COMPLETE**", f"We provided {farmer} with {insurance_type} for {crop} cultivation. Your insurance details are ready."
+            
+        elif service == "vendors":
+            vendor_count = context.get("vendor_count", 0)
+            return "✅ **YOUR SUPPLIER SEARCH COMPLETE**", f"We found {vendor_count} suppliers for your agricultural needs with contact information and pricing."
+            
+        else:
+            return "✅ **SERVICE COMPLETED**", "We've completed your request and provided the information you needed."
+    
+    def _get_multiple_services_summary(self, services_list: List[str], context: Dict[str, Any]) -> str:
+        """Get summary for multiple services completion"""
+        summaries = []
+        
+        if "classification" in services_list:
+            disease = context.get("disease_name", "disease")
+            summaries.append(f"diagnosed {disease}")
+            
+        if "prescription" in services_list:
+            treatment_count = context.get("treatment_count", 0)
+            summaries.append(f"provided {treatment_count} treatments")
+            
+        if "insurance" in services_list:
+            insurance_type = context.get("insurance_type", "insurance services")
+            summaries.append(f"handled crop {insurance_type}")
+            
+        if "vendors" in services_list:
+            vendor_count = context.get("vendor_count", 0)
+            summaries.append(f"found {vendor_count} suppliers")
+        
+        if len(summaries) > 1:
+            return f"We {', '.join(summaries[:-1])} and {summaries[-1]} for you."
+        else:
+            return f"We {summaries[0]} for you."
+    
+    def _get_contextual_help_section(self, services_used: Dict[str, bool]) -> str:
+        """Get contextual help section based on services used"""
+        help_items = []
+        
+        if services_used["classification"] or services_used["prescription"]:
+            help_items.extend([
+                "Take new photos if you see more problems",
+                "Ask questions about treatment progress"
+            ])
+            
+        if services_used["insurance"]:
+            help_items.extend([
+                "Get insurance for additional crops",
+                "Calculate premiums for different areas"
+            ])
+            
+        if services_used["vendors"]:
+            help_items.extend([
+                "Find suppliers in different locations",
+                "Get pricing for other products"
+            ])
+        
+        # Add general help items
+        help_items.extend([
+            "Get tips for different seasons and weather",
+            "Ask general agricultural questions"
+        ])
+        
+        # Remove duplicates and limit to 4 items
+        unique_help_items = list(dict.fromkeys(help_items))[:4]
+        
+        help_section = "\n\n💚 **WE'RE HERE TO HELP**"
+        for item in unique_help_items:
+            help_section += f"\n• {item}"
+            
+        return help_section
     
     def _create_clean_followup_response(self, direct_response: str, follow_ups: List[str]) -> str:
         """Create clean followup response without ugly formatting - farmers want direct answers!"""
@@ -138,25 +269,18 @@ We checked your plant and gave you treatment advice. Our smart system analyzed y
             
         return clean_message
     
-    def _generate_follow_ups(self, state: WorkflowState) -> List[str]:
+    def _generate_contextual_follow_ups(self, state: WorkflowState, services_used: Dict[str, bool]) -> List[str]:
         """
-        Generate relevant follow-up questions based on previous state and user context
+        Generate relevant follow-up questions based on services actually used
         
         Args:
             state: Current workflow state
+            services_used: Dictionary of which services were used
             
         Returns:
             List of follow-up questions/suggestions (max 3)
         """
         follow_ups = []
-        previous_node = state.get("previous_node", "")
-        user_intent = state.get("user_intent", {})
-        classification_results = state.get("classification_results", {})
-        disease_name = state.get("disease_name", "")
-        prescription_data = state.get("prescription_data", {})
-        plant_type = state.get("plant_type", "")
-        location = state.get("location", "")
-        season = state.get("season", "")
         
         # Extract previous user messages to avoid duplicating questions
         messages = state.get("messages", [])
@@ -167,99 +291,107 @@ We checked your plant and gave you treatment advice. Our smart system analyzed y
         def already_asked(keywords: List[str]) -> bool:
             return any(keyword.lower() in all_user_text for keyword in keywords)
         
-        # Generate professional follow-ups based on previous state
-        follow_ups.extend(self._generate_state_specific_followups(
-            previous_node, disease_name, classification_results, prescription_data, already_asked))
+        # Generate service-specific follow-ups based on what was actually used
+        if services_used["classification"]:
+            follow_ups.extend(self._get_classification_follow_ups(state, already_asked))
+            
+        if services_used["prescription"]:
+            follow_ups.extend(self._get_prescription_follow_ups(state, already_asked))
+            
+        if services_used["insurance"]:
+            follow_ups.extend(self._get_insurance_follow_ups(state, already_asked))
+            
+        if services_used["vendors"]:
+            follow_ups.extend(self._get_vendor_follow_ups(state, already_asked))
         
-        # Add context-aware professional suggestions (if not already covered)
-        general_suggestions = self._generate_general_suggestions(
-            plant_type, season, already_asked)
+        # Add general follow-ups if no specific services or limited specific follow-ups
+        if len(follow_ups) < 2:
+            follow_ups.extend(self._get_general_follow_ups(state, services_used, already_asked))
         
-        # Combine specific and general suggestions, prioritizing specific ones
-        all_suggestions = follow_ups + general_suggestions
-        
-        # Return max 3 follow-ups, prioritizing most relevant
-        return all_suggestions[:3]
+        # Return max 3 unique follow-ups
+        return list(dict.fromkeys(follow_ups))[:3]
     
-    def _generate_state_specific_followups(self, previous_node: str, disease_name: str, 
-                                          classification_results: Dict[str, Any], 
-                                          prescription_data: Dict[str, Any],
-                                          already_asked) -> List[str]:
-        """Generate followups specific to the previous workflow state"""
+    def _get_classification_follow_ups(self, state: WorkflowState, already_asked) -> List[str]:
+        """Generate follow-ups for plant disease classification"""
         follow_ups = []
+        disease_name = state.get("disease_name", "")
+        classification_results = state.get("classification_results", {})
+        confidence = classification_results.get("confidence", 0) * 100 if classification_results else 0
         
-        if previous_node == "classifying":
-            if disease_name and disease_name.lower() != "healthy":
-                # Diseased plant - suggest comprehensive treatment and management options
-                confidence = classification_results.get("confidence", 0) * 100 if classification_results else 0
-                severity = classification_results.get("severity", "Unknown")
+        if disease_name and disease_name.lower() != "healthy":
+            if not already_asked(["treatment", "medicine", "prescription"]):
+                follow_ups.append("💊 Get treatment recommendations for this disease")
+            if not already_asked(["vendor", "supplier", "buy"]) and confidence >= 75:
+                follow_ups.append("🛒 Find suppliers for treatments")
+        else:
+            if not already_asked(["prevention", "care", "maintenance"]):
+                follow_ups.append("🌱 Get preventive care tips")
                 
-                if not already_asked(["treatment", "medicine", "cure", "spray", "fungicide"]):
-                    if severity.lower() in ["high", "severe"]:
-                        follow_ups.append("🚨 **URGENT**: Request immediate therapeutic intervention plan for severe pathogen management")
-                    else:
-                        follow_ups.append("💊 **TREATMENT**: Get evidence-based therapeutic recommendations and application protocols")
-                
-                if not already_asked(["prevent", "prevention", "avoid", "future"]):
-                    follow_ups.append("🛡️ **PREVENTION**: Develop integrated disease management strategy for long-term plant health")
-                    
-                if not already_asked(["vendor", "supplier", "buy", "purchase"]) and confidence >= 75:
-                    follow_ups.append("🛒 **PROCUREMENT**: Connect with certified agricultural suppliers for recommended treatments")
-            else:
-                # Healthy plant - suggest proactive care and monitoring
-                if not already_asked(["care", "maintenance", "fertilizer", "nutrients"]):
-                    follow_ups.append("🌱 **OPTIMIZATION**: Enhance plant vigor with customized nutritional and care protocols")
-                    
-                if not already_asked(["monitor", "early detection", "signs", "symptoms"]):
-                    follow_ups.append("🔍 **MONITORING**: Implement proactive surveillance system for early pathogen detection")
-        
-        elif previous_node == "prescribing":
-            # After prescription - suggest comprehensive implementation support
-            treatments = prescription_data.get("treatments", [])
-            treatment_count = len(treatments)
-            
-            if not already_asked(["vendor", "supplier", "buy", "purchase", "order"]):
-                follow_ups.append(f"🛒 **SUPPLY CHAIN**: Locate certified suppliers for {treatment_count} prescribed treatment{'s' if treatment_count != 1 else ''}")
-            
-            if not already_asked(["dosage", "application", "how to apply", "instructions"]):
-                follow_ups.append("📋 **APPLICATION**: Get detailed administration protocols and safety guidelines")
-                
-            if not already_asked(["monitoring", "response", "effectiveness"]):
-                follow_ups.append("📊 **MONITORING**: Establish treatment efficacy tracking and response assessment")
-        
-        elif previous_node in ["vendor_query", "show_vendors"]:
-            # After vendor info - suggest comprehensive implementation strategy
-            if not already_asked(["application", "timing", "when to apply"]):
-                follow_ups.append("⏰ **TIMING**: Optimize treatment scheduling based on plant phenology and environmental conditions")
-                
-            if not already_asked(["follow-up", "monitoring", "track progress"]):
-                follow_ups.append("📈 **TRACKING**: Develop systematic monitoring protocol for treatment response evaluation")
-                
-            if not already_asked(["resistance", "management", "rotation"]):
-                follow_ups.append("🔄 **RESISTANCE MANAGEMENT**: Plan treatment rotation strategy to prevent pathogen resistance")
-        
         return follow_ups
     
-    def _generate_general_suggestions(self, plant_type: str, season: str, already_asked) -> List[str]:
-        """Generate general agricultural suggestions"""
-        general_suggestions = []
+    def _get_prescription_follow_ups(self, state: WorkflowState, already_asked) -> List[str]:
+        """Generate follow-ups for prescription/treatment"""
+        follow_ups = []
+        treatments = state.get("treatment_recommendations", [])
         
-        if plant_type and not already_asked(["weather", "climate", "temperature"]):
-            general_suggestions.append(f"🌤️ **ENVIRONMENTAL**: Get precision weather analytics and climate adaptation strategies for {plant_type} cultivation")
+        if not already_asked(["vendor", "supplier", "buy"]):
+            follow_ups.append("🛒 Find suppliers for these treatments")
+        if not already_asked(["application", "dosage", "how to apply"]):
+            follow_ups.append("📋 Get application instructions")
+        if not already_asked(["monitor", "track", "effectiveness"]):
+            follow_ups.append("📊 Learn about treatment monitoring")
+            
+        return follow_ups
+    
+    def _get_insurance_follow_ups(self, state: WorkflowState, already_asked) -> List[str]:
+        """Generate follow-ups for insurance services"""
+        follow_ups = []
+        farmer_name = state.get("farmer_name", "Farmer")
+        crop = state.get("plant_type", "crop")
         
-        if season and not already_asked(["seasonal", "season", "timing"]):
-            general_suggestions.append(f"📅 **SEASONAL PLANNING**: Develop {season}-specific crop management and phenological optimization protocols")
+        if not already_asked(["more insurance", "other crops", "additional"]):
+            follow_ups.append("🛡️ Get insurance for other crops")
+        if not already_asked(["companies", "compare", "rates"]):
+            follow_ups.append("🏢 Compare insurance companies")
+        if not already_asked(["certificate", "document", "policy"]):
+            follow_ups.append("📄 Generate insurance certificate")
+            
+        return follow_ups
+    
+    def _get_vendor_follow_ups(self, state: WorkflowState, already_asked) -> List[str]:
+        """Generate follow-ups for vendor/supplier services"""
+        follow_ups = []
+        vendor_count = len(state.get("vendor_options", []))
         
-        if not already_asked(["insurance", "crop insurance", "protection"]):
-            general_suggestions.append("🛡️ **RISK MANAGEMENT**: Explore comprehensive crop insurance and agricultural risk mitigation solutions")
+        if not already_asked(["pricing", "cost", "price"]):
+            follow_ups.append("💰 Compare vendor pricing")
+        if not already_asked(["location", "nearby", "delivery"]):
+            follow_ups.append("📍 Find vendors in other locations")
+        if not already_asked(["contact", "order", "purchase"]):
+            follow_ups.append("📞 Get vendor contact information")
+            
+        return follow_ups
+    
+    def _get_general_follow_ups(self, state: WorkflowState, services_used: Dict[str, bool], already_asked) -> List[str]:
+        """Generate general follow-ups based on context and services not yet used"""
+        follow_ups = []
+        plant_type = state.get("plant_type", "")
+        location = state.get("location", "")
         
-        if not already_asked(["soil", "soil health", "nutrients", "fertility"]):
-            general_suggestions.append("🧪 **SOIL DIAGNOSTICS**: Conduct precision soil health assessment and nutrient optimization analysis")
+        # Suggest services not yet used
+        if not services_used["classification"] and not already_asked(["analyze", "diagnose", "disease"]):
+            follow_ups.append("📸 Upload plant image for disease diagnosis")
+        if not services_used["insurance"] and not already_asked(["insurance", "protection"]):
+            follow_ups.append("🛡️ Get crop insurance quotes")
+        if not services_used["prescription"] and plant_type and not already_asked(["treatment", "care"]):
+            follow_ups.append(f"💊 Get care recommendations for {plant_type}")
+        if not services_used["vendors"] and not already_asked(["supplier", "buy"]):
+            follow_ups.append("🛒 Find agricultural suppliers")
         
-        if not already_asked(["market", "price", "selling", "harvest"]):
-            general_suggestions.append("📊 **MARKET INTELLIGENCE**: Access real-time commodity pricing and harvest timing optimization data")
-        
-        if not already_asked(["automation", "technology", "IoT", "sensors"]):
-            general_suggestions.append("🤖 **PRECISION AGRICULTURE**: Implement IoT monitoring and automated crop management systems")
-        
-        return general_suggestions
+        # General agricultural topics
+        if not already_asked(["weather", "season", "climate"]):
+            follow_ups.append("🌤️ Get weather-based farming advice")
+        if not already_asked(["soil", "nutrients", "fertilizer"]):
+            follow_ups.append("🧪 Learn about soil health")
+            
+        return follow_ups

@@ -58,6 +58,16 @@ class WorkflowState(TypedDict):
     order_details: NotRequired[Dict[str, Any]]
     order_status: NotRequired[Optional[str]]
     
+    # Insurance Information
+    insurance_context: NotRequired[Dict[str, Any]]
+    insurance_premium_details: NotRequired[Optional[Dict[str, Any]]]
+    insurance_companies: NotRequired[List[Dict[str, Any]]]
+    insurance_recommendations: NotRequired[Optional[Dict[str, Any]]]
+    insurance_certificate: NotRequired[Optional[Dict[str, Any]]]
+    farmer_name: NotRequired[Optional[str]]
+    farmer_id: NotRequired[Optional[str]]
+    area_hectare: NotRequired[Optional[float]]
+    
     # Conversation History (append-only list)
     messages: Annotated[List[Dict[str, Any]], operator.add]
     

@@ -137,10 +137,22 @@ class InitialNode(BaseNode):
             add_message_to_state(state, "assistant", image_request_msg)
             state["requires_user_input"] = True
             
+        elif user_intent.get("wants_insurance", False):
+            # User wants insurance services
+            state["next_action"] = "insurance"
+            insurance_msg = "🏦 I'll help you with crop insurance options."
+            
+            # Add general answer if this is a hybrid request
+            if general_answer:
+                insurance_msg += f"\n\n🌾 **General Agricultural Advice:** {general_answer}"
+            
+            add_message_to_state(state, "assistant", insurance_msg)
+            
         elif user_intent.get("is_general_question", False) and not any([
             user_intent["wants_classification"], 
             user_intent["wants_prescription"], 
-            user_intent["wants_vendors"]
+            user_intent["wants_vendors"],
+            user_intent["wants_insurance"]
         ]):
             # Check if this is a plant-related general question that might need clarification
             user_message_lower = state["user_message"].lower()
@@ -170,6 +182,7 @@ class InitialNode(BaseNode):
 • **Analyze plant diseases** - Upload a photo of your plant for diagnosis
 • **Recommend treatments** - Get specific treatment plans after diagnosis  
 • **Find suppliers** - Locate vendors for recommended treatments
+• **Provide crop insurance** - Calculate premiums and get insurance recommendations
 
 What would you like me to help you with? Please share more details or upload a plant image."""
                 
@@ -199,7 +212,8 @@ What would you like me to help you with? Please share more details or upload a p
             help_msg = "🌱 Hello! I'm your plant disease diagnosis assistant. I can help you:\n\n" + \
                       "• **Identify diseases** - Upload a photo for analysis\n" + \
                       "• **Get treatment recommendations** - Get prescription after diagnosis\n" + \
-                      "• **Find vendors** - Locate suppliers for treatments\n\n" + \
+                      "• **Find vendors** - Locate suppliers for treatments\n" + \
+                      "• **Crop insurance** - Calculate premiums and get insurance recommendations\n\n" + \
                       "What would you like me to help you with today?"
             
             # Add general answer if available
@@ -295,25 +309,35 @@ Analyze the following user message and determine their intent by responding with
 - wants_prescription: (boolean) Does the user want treatment recommendations?  
 - wants_vendors: (boolean) Does the user want to find/buy products?
 - wants_full_workflow: (boolean) Does the user want the complete process (diagnosis + treatment + vendors)?
+- wants_insurance: (boolean) Does the user want crop insurance services (premium calculation, recommendations, companies, coverage)?
+- wants_insurance_premium: (boolean) Specifically wants to calculate insurance premium/cost?
+- wants_insurance_companies: (boolean) Specifically wants to find insurance companies/providers?
+- wants_insurance_recommendation: (boolean) Specifically wants insurance recommendation based on crop/disease?
 - is_general_question: (boolean) Does the message contain general agricultural/farming questions (soil tips, weather advice, growing tips, etc.)?
 - general_answer: (string) If is_general_question=true, provide helpful answers to the general agriculture questions. Otherwise, leave as empty string.
 
 Rules:
 1. If they want prescription OR vendors OR full workflow, they automatically need classification first
 2. If they want vendors OR full workflow, they automatically need prescription first
-3. Use natural language understanding, not just keyword matching
-4. Consider context and implied meaning
-5. IMPORTANT: Tool requests (wants_*) and general questions (is_general_question) are NOT mutually exclusive
-6. A message can contain BOTH tool requests AND general questions - analyze each part independently
-7. If any part asks for general advice (soil health, weather, growing tips, timing, etc.), set is_general_question=true
-8. Answer the general questions even if there are also tool requests in the same message
+3. Insurance requests can work independently or with other services (diagnosis + insurance is common)
+4. Use natural language understanding, not just keyword matching
+5. Consider context and implied meaning
+6. IMPORTANT: Tool requests (wants_*) and general questions (is_general_question) are NOT mutually exclusive
+7. A message can contain BOTH tool requests AND general questions - analyze each part independently
+8. If any part asks for general advice (soil health, weather, growing tips, timing, etc.), set is_general_question=true
+9. Answer the general questions even if there are also tool requests in the same message
+10. Insurance keywords: premium, insurance, coverage, protect, policy, claim, insure, risk management
 
 Examples:
-- "What's wrong with my plant?" → {{"wants_classification": true, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "is_general_question": false, "general_answer": ""}}
-- "Help my tomato plant get better" → {{"wants_classification": true, "wants_prescription": true, "wants_vendors": false, "wants_full_workflow": false, "is_general_question": false, "general_answer": ""}}
-- "What's the best time to plant tomatoes?" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "is_general_question": true, "general_answer": "The best time to plant tomatoes depends on your location. Generally, plant tomatoes after the last frost date in your area. In most regions, this is 2-3 weeks after the last frost when soil temperature reaches 60-65°F (15-18°C). For warm climates, plant in early spring or fall. For cooler climates, start seeds indoors 6-8 weeks before the last frost date."}}
-- "Analyze my plant disease and also give me watering tips" → {{"wants_classification": true, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "is_general_question": true, "general_answer": "For proper watering: Water deeply but less frequently to encourage deep root growth. Check soil moisture 2-3 inches deep - if dry, it's time to water. Most crops need 1-2 inches of water per week including rainfall. Water early morning to reduce evaporation and disease risk."}}
-- "Diagnose this leaf, get treatment, and tell me about soil health" → {{"wants_classification": true, "wants_prescription": true, "wants_vendors": false, "wants_full_workflow": false, "is_general_question": true, "general_answer": "For healthy soil: Test pH regularly (most crops prefer 6.0-7.0). Add organic matter like compost to improve structure and nutrients. Ensure good drainage while retaining moisture. Rotate crops to prevent nutrient depletion. Consider cover crops during off-season to maintain soil health."}}
+- "What's wrong with my plant?" → {{"wants_classification": true, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "is_general_question": false, "general_answer": ""}}
+- "Help my tomato plant get better" → {{"wants_classification": true, "wants_prescription": true, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "is_general_question": false, "general_answer": ""}}
+- "I need crop insurance for my wheat farm" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": true, "is_general_question": false, "general_answer": ""}}
+- "How much will insurance cost for 5 hectares of rice?" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": true, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "is_general_question": false, "general_answer": ""}}
+- "Which insurance companies are available in Karnataka?" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": false, "wants_insurance_companies": true, "wants_insurance_recommendation": false, "is_general_question": false, "general_answer": ""}}
+- "My cotton has disease, need treatment and insurance" → {{"wants_classification": true, "wants_prescription": true, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": true, "is_general_question": false, "general_answer": ""}}
+- "What's the best time to plant tomatoes?" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "is_general_question": true, "general_answer": "The best time to plant tomatoes depends on your location. Generally, plant tomatoes after the last frost date in your area. In most regions, this is 2-3 weeks after the last frost when soil temperature reaches 60-65°F (15-18°C). For warm climates, plant in early spring or fall. For cooler climates, start seeds indoors 6-8 weeks before the last frost date."}}
+- "Analyze my plant disease and also give me watering tips" → {{"wants_classification": true, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "is_general_question": true, "general_answer": "For proper watering: Water deeply but less frequently to encourage deep root growth. Check soil moisture 2-3 inches deep - if dry, it's time to water. Most crops need 1-2 inches of water per week including rainfall. Water early morning to reduce evaporation and disease risk."}}
+- "Diagnose this leaf, get treatment, and tell me about soil health" → {{"wants_classification": true, "wants_prescription": true, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "is_general_question": true, "general_answer": "For healthy soil: Test pH regularly (most crops prefer 6.0-7.0). Add organic matter like compost to improve structure and nutrients. Ensure good drainage while retaining moisture. Rotate crops to prevent nutrient depletion. Consider cover crops during off-season to maintain soil health."}}
 
 User message: "{user_message}"
 
@@ -336,6 +360,10 @@ Response (JSON only):"""
                     "wants_prescription": False,
                     "wants_vendors": False,
                     "wants_full_workflow": False,
+                    "wants_insurance": False,
+                    "wants_insurance_premium": False,
+                    "wants_insurance_companies": False,
+                    "wants_insurance_recommendation": False,
                     "is_general_question": False,
                     "general_answer": ""
                 }
@@ -394,9 +422,12 @@ Response (JSON only):"""
             intent["wants_prescription"] = True
             intent["wants_classification"] = True  # Need classification first
         
-        # Vendor keywords
-        vendor_keywords = ["buy", "purchase", "order", "vendor", "shop", "price", "cost"]
-        if any(word in user_message_lower for word in vendor_keywords):
+        # Use centralized intent analyzer for better maintainability
+        from ..intent_analyzer import intent_analyzer
+        detected_intents = intent_analyzer.analyze_intent(user_message)
+        
+        # Map detected intents to workflow flags
+        if detected_intents.get("vendor", 0) > 0.5:
             intent["wants_vendors"] = True
             intent["wants_prescription"] = True  # Need prescription first
             intent["wants_classification"] = True  # Need classification first
