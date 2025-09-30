@@ -103,7 +103,7 @@ class FollowupNode(BaseNode):
                     self._handle_direct_response_action(state, followup_intent)
                     
                 elif followup_intent["action"] == "insurance":
-                    self._handle_insurance_action(state)
+                    await self._handle_insurance_action(state)
                     
                 else:
                     self._handle_general_help_action(state)
@@ -224,10 +224,172 @@ class FollowupNode(BaseNode):
             # User reached completion but didn't say goodbye, show ongoing support
             self._show_ongoing_support(state)
     
-    def _handle_insurance_action(self, state: WorkflowState) -> None:
-        """Handle insurance action - route to insurance node"""
-        logger.info("🏦 Routing to insurance node for crop insurance services")
+    async def _handle_insurance_action(self, state: WorkflowState) -> None:
+        """Handle insurance action - route to insurance node with proper intent analysis"""
+        logger.info("🏦 Analyzing specific insurance intent for routing to insurance node")
+        
+        # Perform detailed insurance intent analysis
+        user_message = state.get("user_message", "")
+        insurance_intent = await self._analyze_insurance_sub_intent(user_message)
+        
+        # Set the detailed user_intent for the insurance node
+        state["user_intent"] = insurance_intent
         state["next_action"] = "insurance"
+        
+        logger.info(f"🎯 Insurance sub-intent determined: {insurance_intent}")
+    
+    async def _analyze_insurance_sub_intent(self, user_message: str) -> Dict[str, Any]:
+        """Analyze specific insurance intent to distinguish between premium, purchase, coverage, etc."""
+        try:
+            prompt = f"""You are an expert insurance intent analyzer. Analyze this user message to determine their specific insurance intent.
+
+User message: "{user_message}"
+
+Determine what the user specifically wants regarding insurance:
+
+EXAMPLES FOR DIFFERENT INTENTS:
+
+PREMIUM CALCULATION (wants_insurance_premium: true):
+- "Help me with insurance premium cost for my farm"  
+- "What is the cost of premium for my potato farm?"
+- "How much will insurance cost for my crops?"
+- "Calculate insurance premium for wheat"
+- "Show me premium rates"
+
+PURCHASE/APPLICATION (wants_insurance_purchase: true):  
+- "Help me apply for crop insurance"
+- "Help me buy insurance for this premium"
+- "Buy crop insurance for me with this premium"
+- "I want to purchase crop insurance"
+- "Generate insurance certificate"
+- "Apply for insurance coverage"
+- "I am fine with purchasing this insurance"
+
+COMPANY INFORMATION (wants_insurance_companies: true):
+- "Which insurance companies are available?"
+- "Show me insurance providers"
+- "List insurance companies in my state"
+
+COVERAGE DETAILS (wants_insurance_coverage: true):
+- "What does insurance cover?"
+- "Tell me about insurance benefits"
+- "What are the coverage details?"
+
+RECOMMENDATION (wants_insurance_recommendation: true):
+- "Recommend best insurance for my crops"
+- "Suggest insurance policy for diseased crops"
+- "Which insurance should I choose?"
+
+CRITICAL RULES:
+1. "Apply for insurance" = PURCHASE intent (wants_insurance_purchase: true)
+2. "Buy insurance" = PURCHASE intent (wants_insurance_purchase: true)  
+3. "Insurance cost/premium" = PREMIUM intent (wants_insurance_premium: true)
+4. "Generate certificate" = PURCHASE intent (wants_insurance_purchase: true)
+5. If message contains both cost and purchase terms, prioritize the main intent
+
+Respond with ONLY a JSON object:
+{{
+    "wants_insurance": true,
+    "wants_insurance_premium": false,
+    "wants_insurance_companies": false, 
+    "wants_insurance_recommendation": false,
+    "wants_insurance_purchase": false,
+    "wants_insurance_coverage": false
+}}"""
+
+            response = await self.llm.ainvoke(prompt)
+            response_text = response.content.strip()
+            
+            logger.info(f"🔍 LLM insurance sub-intent analysis: {response_text}")
+            
+            # Parse JSON response
+            import json
+            try:
+                parsed_intent = json.loads(response_text)
+                
+                # Validate the response has required fields
+                if not isinstance(parsed_intent, dict) or not parsed_intent.get("wants_insurance"):
+                    raise ValueError("Invalid insurance intent response")
+                
+                return parsed_intent
+                
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse insurance sub-intent JSON: {response_text}")
+                return self._fallback_insurance_sub_intent(user_message)
+                
+        except Exception as e:
+            logger.error(f"LLM insurance sub-intent analysis failed: {e}")
+            return self._fallback_insurance_sub_intent(user_message)
+    
+    def _fallback_insurance_sub_intent(self, user_message: str) -> Dict[str, Any]:
+        """Fallback insurance sub-intent analysis using keyword patterns"""
+        message_lower = user_message.lower()
+        
+        # Strong purchase indicators
+        purchase_phrases = [
+            "apply for insurance", "apply for crop insurance", "buy insurance", 
+            "purchase insurance", "generate certificate", "i want to purchase",
+            "i want to buy", "help me apply", "help me buy"
+        ]
+        
+        for phrase in purchase_phrases:
+            if phrase in message_lower:
+                logger.info(f"🎯 Fallback: Purchase intent detected - '{phrase}'")
+                return {
+                    "wants_insurance": True,
+                    "wants_insurance_premium": False,
+                    "wants_insurance_companies": False,
+                    "wants_insurance_recommendation": False, 
+                    "wants_insurance_purchase": True,
+                    "wants_insurance_coverage": False
+                }
+        
+        # Premium calculation indicators  
+        if any(word in message_lower for word in ["premium", "cost", "price", "how much", "calculate"]):
+            logger.info(f"🎯 Fallback: Premium intent detected")
+            return {
+                "wants_insurance": True,
+                "wants_insurance_premium": True,
+                "wants_insurance_companies": False,
+                "wants_insurance_recommendation": False,
+                "wants_insurance_purchase": False,
+                "wants_insurance_coverage": False
+            }
+        
+        # Company inquiry
+        if any(word in message_lower for word in ["companies", "providers", "insurers"]):
+            logger.info(f"🎯 Fallback: Companies intent detected")
+            return {
+                "wants_insurance": True,
+                "wants_insurance_premium": False,
+                "wants_insurance_companies": True,
+                "wants_insurance_recommendation": False,
+                "wants_insurance_purchase": False, 
+                "wants_insurance_coverage": False
+            }
+        
+        # Coverage inquiry  
+        if any(word in message_lower for word in ["cover", "coverage", "benefits", "what does"]):
+            logger.info(f"🎯 Fallback: Coverage intent detected") 
+            return {
+                "wants_insurance": True,
+                "wants_insurance_premium": False,
+                "wants_insurance_companies": False,
+                "wants_insurance_recommendation": False,
+                "wants_insurance_purchase": False,
+                "wants_insurance_coverage": True
+            }
+        
+        # Default fallback to recommendation
+        logger.info(f"🎯 Fallback: Default to recommendation intent")
+        return {
+            "wants_insurance": True,
+            "wants_insurance_premium": False,
+            "wants_insurance_companies": False, 
+            "wants_insurance_recommendation": True,
+            "wants_insurance_purchase": False,
+            "wants_insurance_coverage": False
+        }
     
     def _handle_direct_response_action(self, state: WorkflowState, followup_intent: Dict[str, Any]) -> None:
         """Handle direct response action"""
