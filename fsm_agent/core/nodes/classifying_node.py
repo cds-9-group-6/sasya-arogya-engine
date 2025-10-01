@@ -48,7 +48,7 @@ class ClassifyingNode(BaseNode):
                 state["next_action"] = "error"
                 return state
             
-            # Run classification tool
+            # Run classification tool with tracking
             classification_tool = self.tools["classification"]
             
             # Debug logging to verify context flow
@@ -69,7 +69,23 @@ class ClassifyingNode(BaseNode):
                 "🔬 Analyzing the plant leaf image for disease detection..."
             )
             
-            result = await classification_tool._arun(mlflow_manager=self.mlflow_manager, **classification_input)
+            # Execute with tool tracking
+            import time
+            tool_start_time = time.time()
+            tool_success = True
+            
+            logger.info(f"🔧 Starting classification tool tracking at {tool_start_time}")
+            try:
+                result = await classification_tool._arun(mlflow_manager=self.mlflow_manager, **classification_input)
+                logger.info(f"🔧 Classification tool completed successfully")
+            except Exception as tool_error:
+                tool_success = False
+                logger.error(f"🔧 Classification tool failed: {tool_error}")
+                raise tool_error
+            finally:
+                tool_duration = time.time() - tool_start_time
+                logger.info(f"🔧 Recording classification tool usage: duration={tool_duration:.3f}s, success={tool_success}")
+                self.record_tool_usage("classification_tool", tool_duration, tool_success)
             
             # Determine next action based on user intent FIRST (regardless of classification result)
             user_intent = state.get("user_intent", {})

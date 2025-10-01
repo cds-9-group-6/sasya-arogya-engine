@@ -250,12 +250,160 @@ class DynamicPlanningWorkflow:
             Async function that executes the node
         """
         async def node_executor(state: WorkflowState) -> WorkflowState:
-            """Execute the node and return updated state"""
+            """Execute the node and return updated state with enhanced metrics"""
+            import time
+            start_time = time.time()
+            status = "success"
+            tools_used_count = 0
+            
             try:
-                node = self.node_factory.get_node(node_name)
-                return await node.execute(state)
+                # OpenTelemetry tracing and enhanced metrics for node execution
+                try:
+                    from observability.tracing import get_tracing
+                    from observability.metrics import get_metrics
+                    
+                    tracing = get_tracing()
+                    metrics = get_metrics()
+                    session_id = state.get("session_id", "unknown")
+                    previous_node = state.get("current_node", "start")
+                    
+                    # Collect input metrics
+                    input_message = ""
+                    if state.get("messages") and len(state["messages"]) > 0:
+                        input_message = state["messages"][-1].get("content", "")
+                    
+                    has_image = bool(state.get("user_image"))
+                    has_context = bool(state.get("plant_context"))
+                    context_keys = len(state.get("plant_context", {}).keys()) if has_context else 0
+                    message_length = len(input_message)
+                    
+                    if tracing.is_initialized():
+                        # Enhanced tracing with more attributes
+                        with tracing.trace_node_execution(node_name, session_id) as span:
+                            # Set comprehensive span attributes
+                            span.set_attribute("node.state.has_image", has_image)
+                            span.set_attribute("node.state.has_context", has_context)
+                            span.set_attribute("node.state.context_keys", context_keys)
+                            span.set_attribute("node.input.message_length", message_length)
+                            span.set_attribute("node.previous", previous_node)
+                            span.set_attribute("session.id", session_id[:8])
+                            
+                            # Record input metrics
+                            if metrics.is_initialized():
+                                metrics.record_node_input_metrics(
+                                    node_name=node_name,
+                                    has_image=has_image,
+                                    message_length=message_length,
+                                    has_context=has_context,
+                                    context_keys=context_keys
+                                )
+                                
+                                # Record node transition if we have a previous node
+                                if previous_node != "start" and previous_node != node_name:
+                                    metrics.record_node_transition(previous_node, node_name, session_id)
+                            
+                            # Execute the actual node
+                            node = self.node_factory.get_node(node_name)
+                            result_state = await node.execute(state)
+                            
+                            # Collect output metrics
+                            output_messages = result_state.get("messages", [])
+                            new_messages = len(output_messages) - len(state.get("messages", []))
+                            
+                            total_output_length = 0
+                            if output_messages:
+                                for msg in output_messages[-new_messages:] if new_messages > 0 else []:
+                                    total_output_length += len(msg.get("content", ""))
+                            
+                            has_classification = bool(result_state.get("classification_results"))
+                            has_prescription = bool(result_state.get("prescription_data"))
+                            
+                            # Count tools used (estimate based on state changes)
+                            state_changes = 0
+                            for key in ["classification_results", "prescription_data", "vendor_options", "plant_context"]:
+                                if result_state.get(key) != state.get(key):
+                                    state_changes += 1
+                                    tools_used_count += 1
+                            
+                            # Set output span attributes
+                            span.set_attribute("node.output.message_count", new_messages)
+                            span.set_attribute("node.output.total_length", total_output_length)
+                            span.set_attribute("node.output.has_classification", has_classification)
+                            span.set_attribute("node.output.has_prescription", has_prescription)
+                            span.set_attribute("node.tools.estimated_used", tools_used_count)
+                            
+                            # Record comprehensive execution metrics
+                            if metrics.is_initialized():
+                                execution_time = time.time() - start_time
+                                
+                                # Enhanced node execution metrics
+                                metrics.record_node_execution(
+                                    node_name=node_name, 
+                                    duration=execution_time, 
+                                    status=status,
+                                    session_id=session_id
+                                )
+                                
+                                # Record output metrics
+                                metrics.record_node_output_metrics(
+                                    node_name=node_name,
+                                    output_length=total_output_length,
+                                    messages_generated=new_messages,
+                                    tools_used=tools_used_count,
+                                    has_classification=has_classification,
+                                    has_prescription=has_prescription
+                                )
+                                
+                                # Record workflow progression
+                                workflow_step = len(result_state.get("messages", []))
+                                is_retry = result_state.get("retry_count", 0) > 0
+                                state_complexity = len([k for k, v in result_state.items() if v])
+                                
+                                metrics.record_node_state_progression(
+                                    node_name=node_name,
+                                    state_complexity=state_complexity,
+                                    workflow_step=workflow_step,
+                                    is_retry=is_retry
+                                )
+                            
+                            return result_state
+                    else:
+                        # Fallback without tracing
+                        node = self.node_factory.get_node(node_name)
+                        result_state = await node.execute(state)
+                        
+                        # Record metrics without tracing
+                        try:
+                            from observability.metrics import get_metrics
+                            metrics = get_metrics()
+                            if metrics.is_initialized():
+                                execution_time = time.time() - start_time
+                                metrics.record_node_execution(node_name, execution_time, status)
+                        except:
+                            pass
+                        
+                        return result_state
+                
+                except ImportError:
+                    # OpenTelemetry not available - execute normally
+                    node = self.node_factory.get_node(node_name)
+                    return await node.execute(state)
+                    
             except Exception as e:
+                status = "error"
                 logger.error(f"Error executing node {node_name}: {str(e)}", exc_info=True)
+                
+                # Record error metrics
+                try:
+                    from observability.metrics import get_metrics
+                    metrics = get_metrics()
+                    if metrics.is_initialized():
+                        execution_time = time.time() - start_time
+                        metrics.record_node_execution(node_name, execution_time, status)
+                        metrics.record_error("node_execution_error", node_name)
+                except:
+                    pass
+                
                 set_error(state, f"Error in {node_name} node: {str(e)}")
                 state["next_action"] = "error"
                 return state

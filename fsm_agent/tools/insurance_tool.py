@@ -36,7 +36,7 @@ class InsuranceTool(BaseTool):
     args_schema: type[BaseModel] = InsuranceInput
     
     # Declare the MCP server URL field properly
-    mcp_server_url: str = Field(default_factory=lambda: os.getenv("SASYA_AROGYA_MCP_URL", "http://localhost:8000"), exclude=True)
+    mcp_server_url: str = Field(default_factory=lambda: os.getenv("SASYA_AROGYA_MCP_URL", "http://localhost:8001"), exclude=True)
     
     def __init__(self, **data):
         super().__init__(**data)
@@ -330,19 +330,152 @@ class InsuranceTool(BaseTool):
             return {"error": f"Insurance recommendation failed: {str(e)}"}
     
     def _generate_certificate(self, **kwargs) -> Dict[str, Any]:
-        """Generate insurance certificate (placeholder - requires additional parameters)"""
-        # This would require more detailed input parameters for certificate generation
-        # For now, return a placeholder response
-        return {
-            "action": "generate_certificate",
-            "success": False,
-            "message": "Certificate generation requires additional parameters like policy_id, insurance_company_name, sum_insured_per_hectare, etc.",
-            "required_fields": [
-                "policy_id", "farmer_name", "farmer_id", "insurance_company_name", 
-                "company_address", "sum_insured_per_hectare", "farmer_share_percent",
-                "actuarial_rate_percent", "cut_off_date", "crop_details", "terms_and_conditions"
+        """Generate insurance certificate PDF"""
+        try:
+            from datetime import datetime, timedelta
+            import uuid
+            
+            # Extract farmer information
+            farmer_name = kwargs.get("farmer_name", "Farmer")
+            crop = kwargs.get("crop")
+            area_hectare = kwargs.get("area_hectare")
+            state = kwargs.get("state")
+            
+            # Generate certificate details with defaults
+            policy_id = f"POL-{uuid.uuid4().hex[:8].upper()}"
+            farmer_id = f"FID-{uuid.uuid4().hex[:6].upper()}"
+            cut_off_date = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
+            
+            # Calculate insurance values (mock calculation based on area)
+            base_premium_per_hectare = 15000  # ₹15,000 per hectare
+            sum_insured_per_hectare = base_premium_per_hectare * 3  # ₹45,000 per hectare
+            total_sum_insured = sum_insured_per_hectare * area_hectare
+            
+            # Premium calculations with government subsidy
+            total_premium = area_hectare * base_premium_per_hectare
+            govt_subsidy_percent = 75  # 75% government subsidy
+            farmer_share_percent = 25   # 25% farmer contribution
+            
+            premium_paid_by_govt = total_premium * (govt_subsidy_percent / 100)
+            premium_paid_by_farmer = total_premium * (farmer_share_percent / 100)
+            
+            # Default insurance company details
+            insurance_companies = {
+                "Maharashtra": "Maharashtra State Insurance Company",
+                "Punjab": "Punjab Agricultural Insurance Corporation", 
+                "Tamil Nadu": "Tamil Nadu Crop Insurance Ltd",
+                "Gujarat": "Gujarat Insurance Corporation",
+                "Uttar Pradesh": "UP Agricultural Insurance Co.",
+                "Haryana": "Haryana Crop Insurance Agency",
+                "Karnataka": "Karnataka State Insurance",
+                "Andhra Pradesh": "AP Agricultural Insurance Corp"
+            }
+            
+            company_name = insurance_companies.get(state, "National Agricultural Insurance Scheme")
+            company_address = f"Head Office, {state} State, India"
+            
+            # Standard terms and conditions
+            terms_and_conditions = [
+                "This policy covers crop loss due to natural calamities",
+                "Coverage includes drought, flood, cyclone, and pest attacks", 
+                "Claims must be reported within 48 hours of damage",
+                "Assessment will be conducted by certified agricultural officers",
+                "Premium payment is due before crop sowing season",
+                "Policy is valid for one crop season only",
+                "Sum insured cannot exceed the actual crop value",
+                "Losses due to negligence or willful damage are not covered"
             ]
-        }
+            
+            # Prepare MCP tool call payload
+            mcp_payload = {
+                "name": "generate_insurance_certificate",
+                "arguments": {
+                    "policy_id": policy_id,
+                    "farmer_name": farmer_name,
+                    "farmer_id": farmer_id,
+                    "insurance_company_name": company_name,
+                    "company_address": company_address,
+                    "sum_insured_per_hectare": sum_insured_per_hectare,
+                    "farmer_share_percent": farmer_share_percent,
+                    "actuarial_rate_percent": 12.5,  # Standard actuarial rate
+                    "cut_off_date": cut_off_date,
+                    "crop_details": {
+                        "name": crop,
+                        "area_hectare": area_hectare,
+                        "premium_paid_by_farmer": premium_paid_by_farmer,
+                        "premium_paid_by_govt": premium_paid_by_govt,
+                        "total_sum_insured": total_sum_insured
+                    },
+                    "terms_and_conditions": terms_and_conditions
+                }
+            }
+            
+            logger.info(f"🔍 Generating insurance certificate via MCP server for farmer: {farmer_name}, policy: {policy_id}")
+            
+            # Make HTTP request to MCP server
+            response = requests.post(
+                f"{self.mcp_server_url}/tools/call",
+                json=mcp_payload,
+                headers={"Content-Type": "application/json"},
+                timeout=60  # Longer timeout for PDF generation
+            )
+            
+            if response.status_code != 200:
+                raise Exception(f"MCP server HTTP {response.status_code}: {response.text}")
+            
+            # Process MCP response
+            mcp_response = response.json()
+            
+            if mcp_response.get("isError"):
+                error_msg = "MCP server returned error"
+                if mcp_response.get("content"):
+                    error_msg = mcp_response["content"][0].get("text", error_msg)
+                raise Exception(error_msg)
+            
+            # Extract response content
+            content = mcp_response.get("content", [])
+            result = {
+                "action": "generate_certificate",
+                "success": True,
+                "policy_id": policy_id,
+                "farmer_name": farmer_name,
+                "farmer_id": farmer_id,
+                "crop": crop,
+                "area_hectare": area_hectare,
+                "state": state,
+                "company_name": company_name,
+                "premium_paid_by_farmer": premium_paid_by_farmer,
+                "premium_paid_by_govt": premium_paid_by_govt,
+                "total_sum_insured": total_sum_insured,
+                "pdf_generated": False,
+                "certificate_details": f"Policy ID: {policy_id}\nCompany: {company_name}\nPremium: ₹{premium_paid_by_farmer:,.2f} (Farmer) + ₹{premium_paid_by_govt:,.2f} (Government)\nCoverage: ₹{total_sum_insured:,.2f}",
+                "raw_mcp_response": mcp_response
+            }
+            
+            # Process both text and PDF resources
+            for item in content:
+                if item.get("type") == "text":
+                    # Include any additional text response from the server
+                    result["server_response"] = item["text"]
+                elif item.get("type") == "resource":
+                    if item.get("mimeType") == "application/pdf":
+                        result["pdf_generated"] = True
+                        result["pdf_uri"] = item.get("uri")
+                        result["pdf_name"] = item.get("name", f"insurance_certificate_{policy_id}.pdf")
+                        # Calculate approximate size
+                        if item.get("uri"):
+                            result["pdf_size"] = len(item["uri"].encode()) if isinstance(item["uri"], str) else 0
+            
+            return result
+                
+        except Exception as e:
+            logger.error(f"Certificate generation failed: {str(e)}")
+            return {
+                "action": "generate_certificate", 
+                "success": False,
+                "error": f"Certificate generation failed: {str(e)}",
+                "suggestion": "Please ensure you have completed premium calculation first, and that all required information (farmer name, crop, area, state) is provided."
+            }
 
 
 # Async wrapper for compatibility

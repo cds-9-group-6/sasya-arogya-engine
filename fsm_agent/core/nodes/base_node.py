@@ -54,4 +54,46 @@ class BaseNode(ABC):
         """Update the state to reflect this node is executing"""
         self.logger.info(f"Executing {self.node_name} node for session {state['session_id']}")
         update_state_node(state, self.node_name)
+    
+    def record_tool_usage(self, tool_name: str, duration: float = 0.0, success: bool = True):
+        """Record tool usage metrics for this node"""
+        try:
+            from observability.metrics import get_metrics
+            metrics = get_metrics()
+            if metrics.is_initialized():
+                metrics.record_node_tool_usage(
+                    node_name=self.node_name,
+                    tool_name=tool_name,
+                    duration=duration,
+                    success=success
+                )
+        except ImportError:
+            # Gracefully handle if observability is not available
+            pass
+    
+    async def execute_with_tool_tracking(self, tool, tool_name: str, *args, **kwargs):
+        """Execute a tool with automatic tracking"""
+        import time
+        start_time = time.time()
+        success = True
+        
+        try:
+            if hasattr(tool, 'execute') and callable(tool.execute):
+                result = await tool.execute(*args, **kwargs)
+            elif callable(tool):
+                result = await tool(*args, **kwargs)
+            else:
+                # Synchronous tool
+                result = tool(*args, **kwargs)
+            
+            return result
+            
+        except Exception as e:
+            success = False
+            self.logger.error(f"Tool {tool_name} failed in {self.node_name}: {e}")
+            raise
+        
+        finally:
+            duration = time.time() - start_time
+            self.record_tool_usage(tool_name, duration, success)
 
