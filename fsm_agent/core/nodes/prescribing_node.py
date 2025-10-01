@@ -57,7 +57,7 @@ class PrescribingNode(BaseNode):
                 "💊 Generating personalized treatment recommendations based on the diagnosis..."
             )
             
-            # Run prescription tool
+            # Run prescription tool with tracking
             prescription_tool = self.tools["prescription"]
             
             # Debug logging to verify context flow
@@ -74,7 +74,19 @@ class PrescribingNode(BaseNode):
                 "session_id": state.get("session_id", "unknown")
             }
             
-            result = await prescription_tool._arun(mlflow_manager=self.mlflow_manager, **prescription_input)
+            # Execute with tool tracking
+            import time
+            tool_start_time = time.time()
+            tool_success = True
+            
+            try:
+                result = await prescription_tool._arun(mlflow_manager=self.mlflow_manager, **prescription_input)
+            except Exception as tool_error:
+                tool_success = False
+                raise tool_error
+            finally:
+                tool_duration = time.time() - tool_start_time
+                self.record_tool_usage("prescription_tool", tool_duration, tool_success)
             
             if result and not result.get("error"):
                 self._process_successful_prescription(state, result)

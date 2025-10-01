@@ -495,9 +495,20 @@ Respond with ONLY a JSON object:
             )
             state["stream_immediately"] = True  # Stream processing status immediately
             
-            # Execute tool
-            result = await insurance_tool._arun(mlflow_manager=self.mlflow_manager, **tool_input)
-            return result
+            # Execute tool with tracking
+            import time
+            tool_start_time = time.time()
+            tool_success = True
+            
+            try:
+                result = await insurance_tool._arun(mlflow_manager=self.mlflow_manager, **tool_input)
+                return result
+            except Exception as tool_error:
+                tool_success = False
+                raise tool_error
+            finally:
+                tool_duration = time.time() - tool_start_time
+                self.record_tool_usage("insurance_tool", tool_duration, tool_success)
             
         except Exception as e:
             logger.error(f"Error executing insurance operation: {e}")
