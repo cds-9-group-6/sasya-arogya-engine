@@ -7,10 +7,13 @@ This module provides a FastAPI server interface for the FSM-based planning agent
 import json
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+# Add parent directories to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 # Custom JSON encoder to handle datetime objects
 class CustomJSONEncoder(json.JSONEncoder):
@@ -28,10 +31,29 @@ from dotenv import load_dotenv
 
 from fsm_agent.core.fsm_agent import DynamicPlanningAgent
 
+# Import observability components
+try:
+    from observability.instrumentation import (
+        setup_observability, 
+        instrument_fastapi, 
+        cleanup_observability,
+        get_mlflow_bridge
+    )
+    from observability.metrics import get_metrics
+    from observability.tracing import get_tracing
+    OBSERVABILITY_AVAILABLE = True
+except ImportError as e:
+    OBSERVABILITY_AVAILABLE = False
+
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+# Global observability components
+metrics_collector = None
+tracing_collector = None
+mlflow_bridge = None
 
 # Global agent instance
 agent: Optional[DynamicPlanningAgent] = None
@@ -40,7 +62,27 @@ agent: Optional[DynamicPlanningAgent] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan"""
-    global agent
+    global agent, metrics_collector, tracing_collector, mlflow_bridge
+    
+    # Initialize observability components
+    if OBSERVABILITY_AVAILABLE:
+        try:
+            logger.info("Setting up OpenTelemetry observability...")
+            components = setup_observability()
+            metrics_collector = components.get("metrics")
+            tracing_collector = components.get("tracing") 
+            
+            # Setup MLflow-OTel bridge
+            mlflow_bridge = get_mlflow_bridge()
+            
+            # Instrument FastAPI
+            instrument_fastapi(app)
+            
+            logger.info("✅ Observability setup completed")
+        except Exception as e:
+            logger.warning(f"Failed to setup observability: {e}")
+    else:
+        logger.info("⏭️ OpenTelemetry not available - running without observability")
     
     # Initialize agent on startup (MLflow is now initialized within the workflow)
     llm_config = {
@@ -70,6 +112,14 @@ async def lifespan(app: FastAPI):
                 logger.info("MLflow persistent run ended")
         except Exception as e:
             logger.warning(f"Error ending MLflow run on shutdown: {e}")
+    
+    # Cleanup observability
+    if OBSERVABILITY_AVAILABLE:
+        try:
+            cleanup_observability()
+            logger.info("✅ Observability cleanup completed")
+        except Exception as e:
+            logger.warning(f"Error during observability cleanup: {e}")
 
 
 # Create FastAPI app with lifespan manager
@@ -170,45 +220,78 @@ async def chat(request: ChatRequest):
     if not agent:
         raise HTTPException(status_code=503, detail="Agent not initialized")
     
+    # OpenTelemetry tracing and metrics
+    status_code = 200
+    start_time = None
+    
+    if OBSERVABILITY_AVAILABLE and tracing_collector:
+        from time import time
+        start_time = time()
+    
     try:
-        if request.session_id:
-            # Continue existing session
-            result = await agent.process_message(
-                request.session_id, 
-                request.message, 
-                request.image_b64
-            )
+        # Trace the chat operation
+        if OBSERVABILITY_AVAILABLE and tracing_collector:
+            with tracing_collector.trace_http_request("POST", "/sasya-chikitsa/chat", status_code) as span:
+                span.set_attribute("request.has_image", bool(request.image_b64))
+                span.set_attribute("request.session_id", request.session_id or "new")
+                
+                return await _process_chat_request(request)
         else:
-            # Start new session
-            result = await agent.start_session(
-                request.message, 
-                request.image_b64,
-                request.context
-            )
+            return await _process_chat_request(request)
         
-        if not result.get("success"):
-            raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
-        
-        # Format response
-        session_data = result.get("result", result)
-        
-        return ChatResponse(
-            success=True,
-            session_id=session_data.get("session_id"),
-            messages=session_data.get("messages", []),
-            state=session_data.get("state"),
-            is_complete=session_data.get("is_complete", False),
-            requires_user_input=session_data.get("requires_user_input", False),
-            classification_results=session_data.get("classification_results"),
-            prescription_data=session_data.get("prescription_data"),
-            vendor_options=session_data.get("vendor_options")
-        )
-        
-    except HTTPException:
+    except HTTPException as e:
+        status_code = e.status_code
+        if OBSERVABILITY_AVAILABLE and metrics_collector:
+            metrics_collector.record_error("http_error", "chat_endpoint")
         raise
     except Exception as e:
+        status_code = 500
         logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+        if OBSERVABILITY_AVAILABLE and metrics_collector:
+            metrics_collector.record_error("internal_error", "chat_endpoint")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Record HTTP metrics
+        if OBSERVABILITY_AVAILABLE and metrics_collector and start_time:
+            from time import time
+            duration = time() - start_time
+            metrics_collector.record_http_request("POST", "/sasya-chikitsa/chat", status_code, duration)
+
+
+async def _process_chat_request(request: ChatRequest) -> ChatResponse:
+    """Process chat request with session management"""
+    if request.session_id:
+        # Continue existing session
+        result = await agent.process_message(
+            request.session_id, 
+            request.message, 
+            request.image_b64
+        )
+    else:
+        # Start new session
+        result = await agent.start_session(
+            request.message, 
+            request.image_b64,
+            request.context
+        )
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+    
+    # Format response
+    session_data = result.get("result", result)
+    
+    return ChatResponse(
+        success=True,
+        session_id=session_data.get("session_id"),
+        messages=session_data.get("messages", []),
+        state=session_data.get("state"),
+        is_complete=session_data.get("is_complete", False),
+        requires_user_input=session_data.get("requires_user_input", False),
+        classification_results=session_data.get("classification_results"),
+        prescription_data=session_data.get("prescription_data"),
+        vendor_options=session_data.get("vendor_options")
+    )
 
 
 @app.post("/sasya-chikitsa/chat-stream")

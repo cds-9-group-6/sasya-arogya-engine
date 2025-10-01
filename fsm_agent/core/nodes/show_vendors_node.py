@@ -49,7 +49,7 @@ class ShowVendorsNode(BaseNode):
                 "🔍 Searching for local vendors and current pricing..."
             )
             
-            # Run vendor tool
+            # Run vendor tool with tracking
             vendor_tool = self.tools["vendor"]
             
             # Debug logging to verify context flow
@@ -62,7 +62,19 @@ class ShowVendorsNode(BaseNode):
                 "user_preferences": state.get("user_context", {})
             }
             
-            result = await vendor_tool.arun(vendor_input)
+            # Execute with tool tracking
+            import time
+            tool_start_time = time.time()
+            tool_success = True
+            
+            try:
+                result = await vendor_tool.arun(vendor_input)
+            except Exception as tool_error:
+                tool_success = False
+                raise tool_error
+            finally:
+                tool_duration = time.time() - tool_start_time
+                self.record_tool_usage("vendor_tool", tool_duration, tool_success)
             
             if result and not result.get("error"):
                 self._process_successful_vendor_search(state, result)

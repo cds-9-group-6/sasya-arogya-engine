@@ -47,6 +47,7 @@
 - [Usage](#-usage)
 - [API Reference](#-api-reference)
 - [Configuration](#-configuration)
+- [Observability](#-observability)
 - [Testing](#-testing)
 - [Documentation](#-documentation)
 - [Contributing](#-contributing)
@@ -1141,6 +1142,103 @@ export INSURANCE_DEBUG=true
 # Test specific intent disambiguation
 python test_insurance_integration.py --test-disambiguation
 ```
+
+## 📊 Observability
+
+The Sasya Arogya Engine includes a comprehensive observability stack built on OpenTelemetry, providing real-time monitoring, metrics collection, and distributed tracing for all system components.
+
+### 🎯 Key Features
+
+- **📈 Real-time Dashboards**: Grafana dashboards for system overview, ML performance, and LangGraph analytics
+- **🔍 Distributed Tracing**: Complete request flow tracking through Jaeger
+- **📊 Comprehensive Metrics**: System, ML model, and workflow metrics via Prometheus
+- **🎛️ LangGraph Analytics**: Detailed node execution, tool usage, and workflow progression tracking
+- **🤖 ML Performance Monitoring**: CNN model confidence, inference timing, and accuracy metrics
+- **🔄 MLflow Integration**: Bridge existing MLflow metrics to OpenTelemetry ecosystem
+
+### 📈 Available Dashboards
+
+| **Dashboard** | **Purpose** | **URL** |
+|---------------|-------------|---------|
+| **System Overview** | Request latency, throughput, model confidence | [localhost:3000/d/sasya-engine-overview](http://localhost:3000/d/sasya-engine-overview) |
+| **ML Performance** | CNN metrics, inference timing, accuracy | [localhost:3000/d/sasya-ml-performance](http://localhost:3000/d/sasya-ml-performance) |
+| **LangGraph Analytics** | Node execution, tool usage, workflow flows | [localhost:3000/d/simple-langgraph](http://localhost:3000/d/simple-langgraph) |
+
+### 🚀 Quick Start
+
+```bash
+# 1. Start the observability stack
+cd observability
+docker-compose up -d
+
+# 2. Install observability dependencies
+source ../.venv/bin/activate
+pip install -r otel_requirements_simple.txt
+
+# 3. Start the application with observability
+cd ..
+python fsm_agent/run_fsm_server.py --host 127.0.0.1 --port 9080
+
+# 4. Access dashboards
+# Grafana: http://localhost:3000 (admin/sasya-admin)
+# Prometheus: http://localhost:9090
+# Jaeger: http://localhost:16686
+```
+
+### 📊 Key Metrics Tracked
+
+#### **System Metrics**
+- ✅ **Request Latency**: Average, P95, P99 percentiles
+- ✅ **Throughput**: Requests per second by endpoint
+- ✅ **HTTP Status Codes**: Success/error rate tracking
+
+#### **ML/AI Metrics**
+- ✅ **Model Confidence**: CNN and SME model confidence scores
+- ✅ **Inference Duration**: Model prediction timing
+- ✅ **Classification Accuracy**: Real-time accuracy tracking
+- ✅ **MLflow Integration**: Seamless bridge to existing ML tracking
+
+#### **LangGraph Workflow Metrics**
+- ✅ **Node Execution**: Timing and success rates per node type
+- ✅ **Tool Usage**: Individual tool execution frequency and duration
+- ✅ **Workflow Progression**: User journey through conversation states
+- ✅ **Transition Tracking**: Node-to-node flow analysis
+
+### 🔧 Configuration
+
+The observability stack is pre-configured but customizable via:
+
+```bash
+# Environment variables
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+OTEL_SERVICE_NAME=sasya-arogya-engine
+OTEL_RESOURCE_ATTRIBUTES="service.version=1.0.0"
+
+# Dashboard customization
+observability/config/grafana/dashboards/
+```
+
+### 📚 Complete Documentation
+
+For detailed setup, troubleshooting, and advanced configuration:
+
+**📖 [Observability Documentation](./observability/README.md)**
+- Architecture details and component overview  
+- Step-by-step installation guide
+- Dashboard customization and alerting
+- Troubleshooting common issues
+- Advanced OpenTelemetry configuration
+- Performance tuning guidelines
+
+### 🎛️ Access Credentials
+
+| **Service** | **URL** | **Credentials** |
+|-------------|---------|-----------------|
+| **Grafana** | http://localhost:3000 | admin / sasya-admin |
+| **Prometheus** | http://localhost:9090 | No auth required |
+| **Jaeger** | http://localhost:16686 | No auth required |
+
+---
 
 ## 🧪 Testing
 

@@ -452,6 +452,36 @@ Important:
                 except Exception as e:
                     logger.warning(f"Failed to log metrics to MLflow: {e}")
             
+            # Bridge metrics to OpenTelemetry
+            try:
+                # Import the bridge (graceful failure if not available)
+                from observability.instrumentation import get_mlflow_bridge
+                
+                mlflow_bridge = get_mlflow_bridge()
+                
+                # Calculate processing durations (if timing was tracked)
+                durations = {
+                    "cnn_duration": decision_data.get("cnn_processing_time", 0.0),
+                    "sme_duration": decision_data.get("llava_processing_time", 0.0)
+                }
+                
+                # Bridge classification metrics to OpenTelemetry
+                mlflow_bridge.bridge_classification_metrics(
+                    session_id=session_id,
+                    cnn_result=cnn_result,
+                    sme_result=llava_result,
+                    final_result=final_result,
+                    durations=durations
+                )
+                
+                logger.debug(f"Bridged classification metrics to OpenTelemetry for session {session_id}")
+                
+            except ImportError:
+                # OpenTelemetry not available - continue without bridging
+                pass
+            except Exception as e:
+                logger.warning(f"Failed to bridge metrics to OpenTelemetry: {e}")
+            
             # Log completion
             logger.info(f"Classification completed: {decision_data['final_disease_name']} ({decision_data['final_confidence']:.2f}) from {decision_data['result_source']}")
             
