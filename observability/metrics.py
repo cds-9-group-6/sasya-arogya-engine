@@ -310,6 +310,31 @@ class SasyaMetrics:
             unit="1"
         )
         
+        # Intent handling metrics
+        self._metrics["out_of_scope_requests"] = self._meter.create_counter(
+            name="out_of_scope_requests_total",
+            description="Total number of out-of-scope requests",
+            unit="1"
+        )
+        
+        self._metrics["unhandled_intents"] = self._meter.create_counter(
+            name="unhandled_intents_total", 
+            description="Total number of intents that could not be handled",
+            unit="1"
+        )
+        
+        self._metrics["intent_confidence"] = self._meter.create_histogram(
+            name="intent_confidence_score",
+            description="Confidence score distribution for intent analysis",
+            unit="1"
+        )
+        
+        self._metrics["response_type_usage"] = self._meter.create_counter(
+            name="response_type_usage_total",
+            description="Usage count of different response types",
+            unit="1"
+        )
+        
         logger.info("OpenTelemetry metric instruments created")
     
     def is_initialized(self) -> bool:
@@ -647,6 +672,71 @@ class SasyaMetrics:
         }
         
         self._metrics["errors"].add(1, labels)
+    
+    # Intent Handling Metrics
+    def record_out_of_scope_request(self, intent_type: str = "unknown", 
+                                   user_message_category: str = "general"):
+        """Record an out-of-scope request"""
+        if not self.is_initialized():
+            return
+            
+        labels = {
+            "intent_type": intent_type,
+            "message_category": user_message_category
+        }
+        
+        self._metrics["out_of_scope_requests"].add(1, labels)
+    
+    def record_unhandled_intent(self, intent: str, confidence: float = 0.0, 
+                               reason: str = "unknown"):
+        """Record an intent that could not be handled"""
+        if not self.is_initialized():
+            return
+            
+        labels = {
+            "intent": intent,
+            "reason": reason,
+            "confidence_bucket": self._get_confidence_bucket(confidence)
+        }
+        
+        self._metrics["unhandled_intents"].add(1, labels)
+    
+    def record_intent_confidence(self, intent: str, confidence: float):
+        """Record intent analysis confidence score"""
+        if not self.is_initialized():
+            return
+            
+        labels = {
+            "intent": intent,
+            "confidence_bucket": self._get_confidence_bucket(confidence)
+        }
+        
+        self._metrics["intent_confidence"].record(confidence, labels)
+    
+    def record_response_type_usage(self, response_type: str, node: str = "unknown", 
+                                  success: bool = True):
+        """Record usage of different response types"""
+        if not self.is_initialized():
+            return
+            
+        labels = {
+            "response_type": response_type,
+            "node": node,
+            "status": "success" if success else "failure"
+        }
+        
+        self._metrics["response_type_usage"].add(1, labels)
+    
+    def _get_confidence_bucket(self, confidence: float) -> str:
+        """Get confidence bucket for categorization"""
+        if confidence >= 0.8:
+            return "high"
+        elif confidence >= 0.6:
+            return "medium"
+        elif confidence >= 0.3:
+            return "low"
+        else:
+            return "very_low"
     
     def get_metrics_endpoint_url(self) -> Optional[str]:
         """Get the Prometheus metrics endpoint URL"""
