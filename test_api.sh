@@ -71,14 +71,23 @@ make_request() {
     echo "   Method: $method"
     echo "   Endpoint: http://$host:$port$endpoint"
     
+    # Build and display the exact curl command
     if [ -n "$data" ]; then
         echo "   Data: $data"
+        local curl_cmd="curl -s -w \"\\nHTTP_STATUS:%{http_code}\" -X \"$method\" -H \"Content-Type: application/json\" -d '$data' \"http://$host:$port$endpoint\""
+        echo -e "   ${YELLOW}📋 Exact curl command:${NC}"
+        echo "   $curl_cmd"
+        
         response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
                       -X "$method" \
                       -H "Content-Type: application/json" \
                       -d "$data" \
                       "http://$host:$port$endpoint")
     else
+        local curl_cmd="curl -s -w \"\\nHTTP_STATUS:%{http_code}\" -X \"$method\" \"http://$host:$port$endpoint\""
+        echo -e "   ${YELLOW}📋 Exact curl command:${NC}"
+        echo "   $curl_cmd"
+        
         response=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
                       -X "$method" \
                       "http://$host:$port$endpoint")
@@ -110,6 +119,11 @@ test_streaming() {
     echo "   Method: POST"
     echo "   Endpoint: http://$host:$port/sasya-chikitsa/chat-stream"
     echo "   Data: $data"
+    
+    # Display the exact curl command for streaming
+    local curl_cmd="timeout 10s curl -s -X POST -H \"Content-Type: application/json\" -d '$data' \"http://$host:$port/sasya-chikitsa/chat-stream\""
+    echo -e "   ${YELLOW}📋 Exact curl command:${NC}"
+    echo "   $curl_cmd"
     
     log_info "Streaming for 10 seconds..."
     timeout 10s curl -s \
@@ -158,13 +172,17 @@ run_tests() {
     make_request "GET" "/health" "" "Health check" "$host" "$port"
     make_request "GET" "/sasya-chikitsa/stats" "" "Agent statistics" "$host" "$port"
     
-    # Test chat endpoint with simple message
-    local simple_chat='{"message": "Hello, can you help me with plant disease diagnosis?"}'
-    make_request "POST" "/sasya-chikitsa/chat" "$simple_chat" "Simple chat message" "$host" "$port"
+    # # Test chat endpoint with simple message
+    # local simple_chat='{"message": "Hello, can you help me with plant disease diagnosis?"}'
+    # make_request "POST" "/sasya-chikitsa/chat" "$simple_chat" "Simple chat message" "$host" "$port"
     
-    # Test chat endpoint with image (base64 encoded)
-    local image_chat='{"message": "What disease is affecting this plant?", "image_b64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="}'
-    make_request "POST" "/sasya-chikitsa/chat" "$image_chat" "Chat with image" "$host" "$port"
+    # # Test chat endpoint with image (base64 encoded)
+    # local image_chat='{"message": "What disease is affecting this plant?", "image_b64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="}'
+    # make_request "POST" "/sasya-chikitsa/chat" "$image_chat" "Chat with image" "$host" "$port"
+    
+    # Test chat endpoint for organic prescription for black rot in apple tree
+    local organic_prescription_chat='{"message": "Can you give me an organic prescription for black rot in apple tree?"}'
+    make_request "POST" "/sasya-chikitsa/chat" "$organic_prescription_chat" "Organic prescription for black rot in apple tree" "$host" "$port"
     
     # Test session endpoints (use session ID from previous response if available)
     local test_session_id="session_12345678_1234567890"
