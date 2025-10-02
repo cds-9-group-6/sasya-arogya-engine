@@ -459,24 +459,3 @@ zipp==3.23.0
     # via importlib-metadata
 zstandard==0.24.0
     # via langsmith
-# OpenTelemetry requirements for Sasya Arogya Engine
-opentelemetry-api==1.22.0
-opentelemetry-sdk==1.22.0
-opentelemetry-instrumentation==0.43b0
-
-# Core instrumentations
-opentelemetry-instrumentation-fastapi==0.43b0
-opentelemetry-instrumentation-httpx==0.43b0
-opentelemetry-instrumentation-requests==0.43b0
-opentelemetry-instrumentation-logging==0.43b0
-opentelemetry-instrumentation-system-metrics==0.43b0
-
-# Exporters
-opentelemetry-exporter-otlp==1.22.0
-opentelemetry-exporter-prometheus==0.43b0
-
-# Metrics and tracing
-opentelemetry-semantic-conventions==0.43b0
-
-# Additional instrumentation for ML/AI frameworks
-opentelemetry-instrumentation-redis==0.43b0
