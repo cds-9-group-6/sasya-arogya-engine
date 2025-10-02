@@ -716,6 +716,7 @@ class DynamicPlanningWorkflow:
                 
                 # CRITICAL FIX: Only stream NEW assistant_response, not old accumulated data
                 previous_node = actual_state_data.get("previous_node", "")
+                current_node = actual_state_data.get("current_node", "unknown")
                 logger.debug(f"🔍 DEBUG: actual_state_data keys: {list(actual_state_data.keys())}")
                 
                 # Check for assistant_response that needs immediate streaming
@@ -765,7 +766,6 @@ class DynamicPlanningWorkflow:
                             logger.debug(f"🚫 Skipped streaming response for session {session_id} from {current_node}")
                 
                 # Only track state transitions for logging purposes
-                current_node = actual_state_data.get("current_node")
                 if current_node and current_node != last_node:
                     last_node = current_node
                     logger.info(f"Refactored state transition: {previous_state.get('current_node', 'None')} → {current_node}")

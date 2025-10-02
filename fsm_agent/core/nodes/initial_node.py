@@ -13,6 +13,27 @@ from ...tools.context_extractor import ContextExtractorTool
 
 logger = logging.getLogger(__name__)
 
+# Import response configuration and metrics (with error handling)
+try:
+    from ..response_config import response_config, ResponseType
+    RESPONSE_CONFIG_AVAILABLE = True
+except ImportError:
+    RESPONSE_CONFIG_AVAILABLE = False
+    logger.warning("Response configuration not available")
+
+try:
+    import sys
+    import os
+    # Add project root to Python path for absolute imports
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from observability.metrics import get_metrics
+    METRICS_AVAILABLE = True  
+except ImportError:
+    METRICS_AVAILABLE = False
+    logger.warning("Metrics not available")
+
 
 class InitialNode(BaseNode):
     """Initial node - handles user input and determines first action based on user intent"""
@@ -66,6 +87,11 @@ class InitialNode(BaseNode):
             if general_answer:
                 state["general_answer"] = general_answer
                 logger.info(f"🌾 Stored general answer for hybrid request: {general_answer[:100]}...")
+            
+            # Check for out-of-scope questions first
+            if user_intent.get("out_of_scope", False):
+                self._handle_out_of_scope_request(state, user_intent)
+                return state
             
             # Determine next action based on user intent and input
             self._determine_next_action(state, user_intent, general_answer)
@@ -300,6 +326,59 @@ Response:"""
             logger.info(f"👋 Fallback goodbye intent detection: {fallback_result}")
             return fallback_result
     
+    def _handle_out_of_scope_request(self, state: WorkflowState, user_intent: Dict[str, Any]) -> None:
+        """Handle out-of-scope requests with appropriate response and metrics"""
+        
+        # Record metrics if available
+        if METRICS_AVAILABLE:
+            try:
+                metrics = get_metrics()
+                scope_confidence = user_intent.get("scope_confidence", 0.0)
+                
+                # Determine message category for metrics
+                user_message = state.get("user_message", "").lower()
+                if any(word in user_message for word in ["technology", "computer", "phone", "software"]):
+                    category = "technology"
+                elif any(word in user_message for word in ["medicine", "doctor", "health", "medical"]):
+                    category = "medical"
+                elif any(word in user_message for word in ["car", "vehicle", "transport"]):
+                    category = "automotive"
+                elif any(word in user_message for word in ["cooking", "recipe", "food"]):
+                    category = "cooking"  
+                elif any(word in user_message for word in ["weather", "temperature", "rain"]):
+                    category = "weather"
+                else:
+                    category = "general"
+                
+                metrics.record_out_of_scope_request(
+                    intent_type="non_agricultural", 
+                    user_message_category=category
+                )
+                metrics.record_intent_confidence("out_of_scope", scope_confidence)
+                metrics.record_response_type_usage(ResponseType.OUT_OF_SCOPE.value, "initial")
+                
+            except Exception as e:
+                logger.warning(f"Failed to record out-of-scope metrics: {e}")
+        
+        # Generate appropriate response
+        if RESPONSE_CONFIG_AVAILABLE:
+            try:
+                response = response_config.get_response(ResponseType.OUT_OF_SCOPE)
+                logger.info(f"🚫 Generated out-of-scope response for non-agricultural question")
+            except Exception as e:
+                logger.warning(f"Failed to get response from config: {e}")
+                response = "I'm sorry, but I can only help with crop care and agricultural questions. Could you please ask me something related to plant diseases, farming, or crop management?"
+        else:
+            response = "I'm sorry, but I can only help with crop care and agricultural questions. Could you please ask me something related to plant diseases, farming, or crop management?"
+        
+        # Set state for completion  
+        add_message_to_state(state, response, "assistant")
+        state["assistant_response"] = response
+        state["next_action"] = "completed"
+        state["is_complete"] = True
+        
+        logger.info(f"🚫 Out-of-scope request handled. Confidence: {user_intent.get('scope_confidence', 0.0)}")
+    
     def _build_intent_analysis_prompt(self, user_message: str) -> str:
         """Build the intent analysis prompt"""
         return f"""You are an expert at understanding user intent for a plant disease diagnosis and treatment system.
@@ -315,6 +394,9 @@ Analyze the following user message and determine their intent by responding with
 - wants_insurance_recommendation: (boolean) Specifically wants insurance recommendation based on crop/disease?
 - wants_insurance_purchase: (boolean) Specifically wants to buy/apply/purchase insurance or generate certificate?
 - is_general_question: (boolean) Does the message contain general agricultural/farming questions (soil tips, weather advice, growing tips, etc.)?
+- is_agriculture_related: (boolean) Is this question related to agriculture, farming, crops, plants, or agricultural business at all?
+- out_of_scope: (boolean) Is this question completely outside agricultural/farming/crop care domain?
+- scope_confidence: (number 0-1) How confident are you that this is agriculture-related (1=definitely agriculture, 0=definitely not agriculture)?
 - general_answer: (string) If is_general_question=true, provide helpful answers to the general agriculture questions. Otherwise, leave as empty string.
 
 Rules:
@@ -328,11 +410,19 @@ Rules:
 8. If any part asks for general advice (soil health, weather, growing tips, timing, etc.), set is_general_question=true
 9. Answer the general questions even if there are also tool requests in the same message
 10. Insurance keywords: premium, insurance, coverage, protect, policy, claim, insure, risk management
+11. SCOPE DETECTION RULES:
+    - is_agriculture_related=true: Questions about crops, plants, farming, agriculture, rural business, food production, etc.
+    - out_of_scope=true: Questions about technology, medicine (human), entertainment, vehicles, cooking recipes, general weather, etc.
+    - scope_confidence: Be very confident (0.9+) for clear agricultural topics, less confident (0.3-0.7) for ambiguous cases
+    - If out_of_scope=true, set all wants_* fields to false and is_general_question to false
+    - Agricultural topics include: plant diseases, crop management, farming techniques, agricultural insurance, farm equipment, pesticides, fertilizers, irrigation, soil management, harvest, seeds, livestock, rural economics
 
 Examples:
-- "What's wrong with my plant?" → {{"wants_classification": true, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "wants_insurance_purchase": false, "is_general_question": false, "general_answer": ""}}
-- "Help my tomato plant get better" → {{"wants_classification": true, "wants_prescription": true, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "wants_insurance_purchase": false, "is_general_question": false, "general_answer": ""}}
-- "I need crop insurance for my wheat farm" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": true, "wants_insurance_purchase": false, "is_general_question": false, "general_answer": ""}}
+- "What's wrong with my plant?" → {{"wants_classification": true, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "wants_insurance_purchase": false, "is_general_question": false, "is_agriculture_related": true, "out_of_scope": false, "scope_confidence": 0.95, "general_answer": ""}}
+- "Help my tomato plant get better" → {{"wants_classification": true, "wants_prescription": true, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "wants_insurance_purchase": false, "is_general_question": false, "is_agriculture_related": true, "out_of_scope": false, "scope_confidence": 0.98, "general_answer": ""}}
+- "I need crop insurance for my wheat farm" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": true, "wants_insurance_purchase": false, "is_general_question": false, "is_agriculture_related": true, "out_of_scope": false, "scope_confidence": 0.99, "general_answer": ""}}
+- "What's the best smartphone to buy?" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "wants_insurance_purchase": false, "is_general_question": false, "is_agriculture_related": false, "out_of_scope": true, "scope_confidence": 0.1, "general_answer": ""}}
+- "How do I fix my car engine?" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": false, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "wants_insurance_purchase": false, "is_general_question": false, "is_agriculture_related": false, "out_of_scope": true, "scope_confidence": 0.05, "general_answer": ""}}
 - "How much will insurance cost for 5 hectares of rice?" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": true, "wants_insurance_companies": false, "wants_insurance_recommendation": false, "wants_insurance_purchase": false, "is_general_question": false, "general_answer": ""}}
 - "Which insurance companies are available in Karnataka?" → {{"wants_classification": false, "wants_prescription": false, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": false, "wants_insurance_companies": true, "wants_insurance_recommendation": false, "wants_insurance_purchase": false, "is_general_question": false, "general_answer": ""}}
 - "My cotton has disease, need treatment and insurance" → {{"wants_classification": true, "wants_prescription": true, "wants_vendors": false, "wants_full_workflow": false, "wants_insurance": true, "wants_insurance_premium": false, "wants_insurance_companies": false, "wants_insurance_recommendation": true, "wants_insurance_purchase": false, "is_general_question": false, "general_answer": ""}}

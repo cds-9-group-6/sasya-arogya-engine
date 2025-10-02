@@ -9,14 +9,35 @@ from typing import Dict, Any
 
 from .base_node import BaseNode
 
+# Import response configuration and metrics (with error handling)
+logger = logging.getLogger(__name__)
+
+try:
+    from ..response_config import response_config, ResponseType
+    RESPONSE_CONFIG_AVAILABLE = True
+except ImportError:
+    RESPONSE_CONFIG_AVAILABLE = False
+    logger.warning("Response configuration not available")
+
+try:
+    import sys
+    import os
+    # Add project root to Python path for absolute imports
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from observability.metrics import get_metrics
+    METRICS_AVAILABLE = True  
+except ImportError:
+    METRICS_AVAILABLE = False
+    logger.warning("Metrics not available")
+
 try:
     from ..workflow_state import WorkflowState, add_message_to_state, set_error, mark_complete
     from ...tools.attention_overlay_tool import AttentionOverlayTool
 except ImportError:
     from ..workflow_state import WorkflowState, add_message_to_state, set_error, mark_complete
     from ...tools.attention_overlay_tool import AttentionOverlayTool
-
-logger = logging.getLogger(__name__)
 
 
 class FollowupNode(BaseNode):
@@ -104,6 +125,9 @@ class FollowupNode(BaseNode):
                     
                 elif followup_intent["action"] == "insurance":
                     await self._handle_insurance_action(state)
+                    
+                elif followup_intent["action"] == "out_of_scope":
+                    self._handle_out_of_scope_action(state, followup_intent)
                     
                 else:
                     self._handle_general_help_action(state)
@@ -518,6 +542,61 @@ Respond with ONLY a JSON object:
         state["next_action"] = "completed"
         state["requires_user_input"] = False  # Clear the flag
     
+    def _handle_out_of_scope_action(self, state: WorkflowState, followup_intent: Dict[str, Any]) -> None:
+        """Handle out-of-scope questions in followup node"""
+        
+        # Record metrics if available
+        if METRICS_AVAILABLE:
+            try:
+                metrics = get_metrics()
+                scope_confidence = followup_intent.get("scope_confidence", 0.0)
+                intent_confidence = followup_intent.get("confidence", 0.0)
+                
+                # Determine message category for metrics
+                user_message = state.get("user_message", "").lower()
+                if any(word in user_message for word in ["technology", "computer", "phone", "software"]):
+                    category = "technology"
+                elif any(word in user_message for word in ["medicine", "doctor", "health", "medical"]):
+                    category = "medical"
+                elif any(word in user_message for word in ["car", "vehicle", "transport"]):
+                    category = "automotive"
+                elif any(word in user_message for word in ["cooking", "recipe", "food"]):
+                    category = "cooking"  
+                elif any(word in user_message for word in ["weather", "temperature", "rain"]):
+                    category = "weather"
+                else:
+                    category = "general"
+                
+                metrics.record_out_of_scope_request(
+                    intent_type="non_agricultural_followup", 
+                    user_message_category=category
+                )
+                metrics.record_intent_confidence("out_of_scope", scope_confidence)
+                metrics.record_intent_confidence("followup_intent", intent_confidence)
+                metrics.record_response_type_usage(ResponseType.OUT_OF_SCOPE.value, "followup")
+                
+            except Exception as e:
+                logger.warning(f"Failed to record out-of-scope metrics in followup: {e}")
+        
+        # Generate appropriate response
+        if RESPONSE_CONFIG_AVAILABLE:
+            try:
+                response = response_config.get_response(ResponseType.OUT_OF_SCOPE)
+                logger.info(f"🚫 Generated out-of-scope response for followup non-agricultural question")
+            except Exception as e:
+                logger.warning(f"Failed to get response from config in followup: {e}")
+                response = "I'm sorry, but I can only help with crop care and agricultural questions. Could you please ask me something related to plant diseases, farming, or crop management?"
+        else:
+            response = "I'm sorry, but I can only help with crop care and agricultural questions. Could you please ask me something related to plant diseases, farming, or crop management?"
+        
+        # Set state for completion  
+        add_message_to_state(state, response, "assistant")
+        state["assistant_response"] = response
+        state["next_action"] = "completed"
+        state["is_complete"] = True
+        
+        logger.info(f"🚫 Out-of-scope followup request handled. Confidence: {followup_intent.get('confidence', 0.0)}, Scope confidence: {followup_intent.get('scope_confidence', 0.0)}")
+    
     def _handle_general_help_action(self, state: WorkflowState) -> None:
         """Handle general help action"""
         state["next_action"] = "general_help"
@@ -675,10 +754,12 @@ Current workflow context:
 User's message: "{user_message}"
 
 Analyze the user's intent and respond with ONLY a JSON object containing:
-- action: One of ["classify", "prescribe", "show_vendors", "insurance", "attention_overlay", "restart", "complete", "direct_response"]
+- action: One of ["classify", "prescribe", "show_vendors", "insurance", "attention_overlay", "restart", "complete", "direct_response", "out_of_scope"]
 - response: (string) If action is "direct_response", provide a helpful answer to their question. Otherwise, leave empty.
 - overlay_type: (string) If action is "attention_overlay", specify "show_overlay" or "overlay_info". Otherwise, leave empty.
 - confidence: (number 0-1) How confident you are in this classification.
+- is_agriculture_related: (boolean) Is this question related to agriculture, farming, crops, plants, or agricultural business?
+- scope_confidence: (number 0-1) How confident are you that this is agriculture-related (1=definitely agriculture, 0=definitely not agriculture)?
 
 Action meanings:
 - "classify": User wants disease diagnosis/classification
@@ -689,6 +770,7 @@ Action meanings:
 - "restart": User wants to start over with new diagnosis
 - "complete": User is done/saying goodbye
 - "direct_response": Answer their question directly (for general agriculture questions, clarifications, etc.)
+- "out_of_scope": Question is completely outside agricultural/farming domain (technology, medicine, entertainment, etc.)
 
 Guidelines:
 1. INSURANCE REQUESTS: If they ask about insurance, premium, coverage, policy, insurance cost, insurance companies - ALWAYS use "insurance" action (WE PROVIDE FULL INSURANCE SERVICES)
@@ -700,6 +782,11 @@ Guidelines:
 7. Be flexible with natural language - "yes give me dosage" means they want prescription/dosage info
 8. IMPORTANT: For insurance keywords (insurance, premium, coverage, cost, policy, companies), ALWAYS route to "insurance" - never use "direct_response"
 9. CRITICAL: "Buy insurance" = "insurance" action, "Buy pesticides" = "show_vendors" action - Context matters!
+10. SCOPE DETECTION: 
+    - Use "out_of_scope" for questions about: technology, human medicine, entertainment, vehicles, cooking, general weather, etc.
+    - is_agriculture_related=false and scope_confidence=0.1-0.3 for clearly non-agricultural topics
+    - is_agriculture_related=true and scope_confidence=0.7-1.0 for agricultural topics
+    - If out_of_scope, set confidence=0.9+ and response="" (let the system handle the standard response)
 
 Current prescription data available: {bool(state.get("prescription_data"))}
 
