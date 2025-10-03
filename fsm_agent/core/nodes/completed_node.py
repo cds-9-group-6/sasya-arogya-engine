@@ -4,7 +4,7 @@ Final state with follow-up questions
 """
 
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 
 from .base_node import BaseNode
@@ -92,7 +92,8 @@ class CompletedNode(BaseNode):
         """Create context summary of what happened in this session"""
         context = {
             "services_count": sum(services_used.values()),
-            "services_list": [service for service, used in services_used.items() if used]
+            "services_list": [service for service, used in services_used.items() if used],
+            "state": state  # Pass state for error checking
         }
         
         # Extract key details for each service used
@@ -146,7 +147,13 @@ class CompletedNode(BaseNode):
         return completion_message
     
     def _get_single_service_summary(self, service: str, context: Dict[str, Any]) -> Tuple[str, str]:
-        """Get title and summary for single service completion"""
+        """Get title and summary for single service completion - checks for errors first"""
+        # First check if there are any errors for this service
+        error_info = self._check_service_errors(service, context)
+        if error_info:
+            return error_info
+            
+        # Only show success if no errors detected
         if service == "classification":
             disease = context.get("disease_name", "disease")
             plant = context.get("plant_type", "plant") or "plant"
@@ -165,26 +172,143 @@ class CompletedNode(BaseNode):
         else:
             return "✅ **SERVICE COMPLETED**", "We've completed your request and provided the information you needed."
     
+    def _check_service_errors(self, service: str, context: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+        """Check if a service has errors based on current operation evidence, not persistent error state"""
+        state = context.get("state")
+        if not state:
+            return None
+            
+        # REMOVED: Don't check persistent error_message - focus on current operation evidence
+        # This prevents false errors when previous operations failed but current ones succeeded
+        
+        # Check tool results for service-specific errors (current operation evidence)
+        tool_results = state.get("tool_results", {})
+        
+        if service == "classification":
+            # Check if classification actually succeeded
+            if not state.get("classification_results") and not state.get("disease_name"):
+                return self._format_service_error(service, "Disease analysis could not be completed", "no_results")
+            
+            # Check for classification-specific errors in tool results
+            if "classification" in tool_results:
+                result = tool_results["classification"]
+                if isinstance(result, dict) and result.get("error"):
+                    return self._format_service_error(service, result["error"], "tool_error")
+                    
+        elif service == "prescription":
+            # Check if prescription actually succeeded
+            if not state.get("prescription_data") and not state.get("treatment_recommendations"):
+                return self._format_service_error(service, "Treatment recommendations could not be generated", "no_results")
+                
+            # Check for prescription-specific errors
+            if "prescription" in tool_results:
+                result = tool_results["prescription"]
+                if isinstance(result, dict) and result.get("error"):
+                    return self._format_service_error(service, result["error"], "tool_error")
+                    
+        elif service == "insurance":
+            # Check if insurance operation actually succeeded
+            has_insurance_data = any([
+                state.get("insurance_premium_details"),
+                state.get("insurance_recommendations"),
+                state.get("insurance_companies"),
+                state.get("insurance_certificate")
+            ])
+            
+            if not has_insurance_data:
+                return self._format_service_error(service, "Insurance service is currently unavailable", "no_results")
+                
+            # Check for insurance-specific errors (MCP server issues)
+            if "insurance" in tool_results:
+                result = tool_results["insurance"]
+                if isinstance(result, dict) and result.get("error"):
+                    error_msg = result["error"]
+                    if "mcp" in error_msg.lower() or "server" in error_msg.lower():
+                        return self._format_service_error(service, "Insurance service is temporarily unavailable", "mcp_error")
+                    else:
+                        return self._format_service_error(service, error_msg, "tool_error")
+        
+        return None  # No errors detected
+    
+    def _format_service_error(self, service: str, error_msg: str, error_type: str) -> Tuple[str, str]:
+        """Format appropriate error message for service failures"""
+        service_names = {
+            "classification": "Plant Diagnosis",
+            "prescription": "Treatment Recommendations", 
+            "insurance": "Crop Insurance"
+        }
+        
+        service_name = service_names.get(service, "Service")
+        
+        if error_type == "mcp_error":
+            title = f"⚠️ **{service_name.upper()} TEMPORARILY UNAVAILABLE**"
+            message = f"Our insurance service is currently experiencing technical difficulties. Please try again in a few minutes or contact support if the issue persists."
+            
+        elif error_type == "no_results":
+            title = f"⚠️ **{service_name.upper()} INCOMPLETE**"
+            message = f"{error_msg}. Please try uploading a clearer image or providing more details, then retry the operation."
+            
+        elif error_type == "tool_error":
+            title = f"⚠️ **{service_name.upper()} FAILED**"
+            message = f"We encountered an issue: {error_msg}. Please try again or contact support if the problem continues."
+            
+        else:  # general error
+            title = f"⚠️ **{service_name.upper()} ERROR**"
+            message = f"An error occurred: {error_msg}. Please try again or contact support for assistance."
+            
+        return title, message
+    
     def _get_multiple_services_summary(self, services_list: List[str], context: Dict[str, Any]) -> str:
-        """Get summary for multiple services completion"""
-        summaries = []
+        """Get summary for multiple services completion - handles mixed success/failure scenarios"""
+        successes = []
+        failures = []
         
-        if "classification" in services_list:
-            disease = context.get("disease_name", "disease")
-            summaries.append(f"diagnosed {disease}")
+        # Check each service for success or failure
+        for service in services_list:
+            error_info = self._check_service_errors(service, context)
             
-        if "prescription" in services_list:
-            treatment_count = context.get("treatment_count", 0)
-            summaries.append(f"provided {treatment_count} treatments")
-            
-        if "insurance" in services_list:
-            insurance_type = context.get("insurance_type", "insurance services")
-            summaries.append(f"handled crop {insurance_type}")
+            if error_info:
+                # Service failed
+                service_names = {
+                    "classification": "plant diagnosis",
+                    "prescription": "treatment recommendations", 
+                    "insurance": "insurance services"
+                }
+                service_name = service_names.get(service, service)
+                failures.append(service_name)
+            else:
+                # Service succeeded
+                if service == "classification":
+                    disease = context.get("disease_name", "disease")
+                    successes.append(f"diagnosed {disease}")
+                elif service == "prescription":
+                    treatment_count = context.get("treatment_count", 0)
+                    successes.append(f"provided {treatment_count} treatments")
+                elif service == "insurance":
+                    insurance_type = context.get("insurance_type", "insurance services")
+                    successes.append(f"handled crop {insurance_type}")
         
-        if len(summaries) > 1:
-            return f"We {', '.join(summaries[:-1])} and {summaries[-1]} for you."
+        # Build summary message based on successes and failures
+        if successes and failures:
+            # Mixed scenario - some succeeded, some failed
+            success_part = f"We {', '.join(successes[:-1])} and {successes[-1]}" if len(successes) > 1 else f"We {successes[0]}"
+            failure_part = f"However, {', '.join(failures)} encountered issues"
+            return f"{success_part} for you. {failure_part}. Please retry the failed operations."
+            
+        elif successes:
+            # All succeeded
+            if len(successes) > 1:
+                return f"We {', '.join(successes[:-1])} and {successes[-1]} for you."
+            else:
+                return f"We {successes[0]} for you."
+                
+        elif failures:
+            # All failed (shouldn't normally happen, but handle gracefully)
+            return f"We encountered issues with {', '.join(failures)}. Please try again or contact support."
+            
         else:
-            return f"We {summaries[0]} for you."
+            # Fallback
+            return "We processed your request."
     
     def _get_contextual_help_section(self, services_used: Dict[str, bool]) -> str:
         """Get contextual help section based on services used"""
@@ -201,7 +325,7 @@ class CompletedNode(BaseNode):
                 "Get insurance for additional crops",
                 "Calculate premiums for different areas"
             ])
-            
+        
         # Add general help items
         help_items.extend([
             "Get tips for different seasons and weather",
