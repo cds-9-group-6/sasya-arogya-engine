@@ -13,10 +13,10 @@ from .base_node import BaseNode
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 
 try:
-    from ..workflow_state import WorkflowState, add_message_to_state, set_error, can_retry
+    from ..workflow_state import WorkflowState, add_message_to_state, set_error, can_retry, clear_error
     from ...tools.classification_tool import ClassificationTool
 except ImportError:
-    from ..workflow_state import WorkflowState, add_message_to_state, set_error, can_retry
+    from ..workflow_state import WorkflowState, add_message_to_state, set_error, can_retry, clear_error
     from ...tools.classification_tool import ClassificationTool
 
 logger = logging.getLogger(__name__)
@@ -108,6 +108,9 @@ class ClassifyingNode(BaseNode):
     
     def _process_successful_classification(self, state: WorkflowState, result: Dict[str, Any], user_intent: Dict[str, Any]) -> None:
         """Process successful classification results"""
+        # Clear any previous error state since this operation succeeded
+        clear_error(state)
+        
         state["classification_results"] = result
         state["disease_name"] = result.get("disease_name")
         state["confidence"] = result.get("confidence")

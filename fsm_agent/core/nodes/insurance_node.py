@@ -10,7 +10,7 @@ import json
 
 from langchain.prompts import ChatPromptTemplate
 from .base_node import BaseNode
-from ..workflow_state import WorkflowState, add_message_to_state, set_error
+from ..workflow_state import WorkflowState, add_message_to_state, set_error, clear_error
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +154,9 @@ Respond with ONLY a JSON object:
             result = await self._execute_insurance_operation(state, action, insurance_context)
             
             if result and not result.get("error"):
+                # Clear any previous error state since this operation succeeded
+                clear_error(state)
+                
                 # Store insurance results in state
                 self._store_insurance_results(state, action, result)
                 
