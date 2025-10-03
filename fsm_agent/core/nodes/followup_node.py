@@ -729,12 +729,16 @@ Action meanings:
 Guidelines:
 1. INSURANCE REQUESTS: If they ask about insurance, premium, coverage, policy, insurance cost, insurance companies - ALWAYS use "insurance" action (WE PROVIDE FULL INSURANCE SERVICES)
 2. TREATMENT REQUESTS: If they ask about dosage, application, treatment instructions - use "prescribe" if no prescription exists, otherwise "direct_response" with detailed answer using available prescription data
-3. CLASSIFICATION REQUESTS: If they ask about disease diagnosis, upload new image, identify disease - use "classify"
-4. General agriculture questions (soil, weather, growing tips) - use "direct_response"  
-5. Clarifications about previous results - use "direct_response"
-6. Be flexible with natural language - "yes give me dosage" means they want prescription/dosage info
-7. IMPORTANT: For insurance keywords (insurance, premium, coverage, cost, policy, companies), ALWAYS route to "insurance" - never use "direct_response"
-8. SCOPE DETECTION: 
+3. CLASSIFICATION REQUESTS: If they ask about disease diagnosis, upload new image, identify disease, analyze disease/plant/leaf - use "classify"
+4. IMPORTANT - ANALYZE keyword disambiguation:
+   - "analyze plant disease" / "analyze this leaf" / "analyze crop" → ALWAYS use "classify" (wants diagnosis only)
+   - "analyze AND treat" / "analyze AND give treatment" → use "prescribe" (wants both diagnosis + treatment)
+   - When in doubt with "analyze", default to "classify" unless treatment is explicitly mentioned
+5. General agriculture questions (soil, weather, growing tips) - use "direct_response"  
+6. Clarifications about previous results - use "direct_response"
+7. Be flexible with natural language - "yes give me dosage" means they want prescription/dosage info
+8. IMPORTANT: For insurance keywords (insurance, premium, coverage, cost, policy, companies), ALWAYS route to "insurance" - never use "direct_response"
+9. SCOPE DETECTION: 
     - Use "out_of_scope" for questions about: technology, human medicine, entertainment, vehicles, cooking, general weather, etc.
     - is_agriculture_related=false and scope_confidence=0.1-0.3 for clearly non-agricultural topics
     - is_agriculture_related=true and scope_confidence=0.7-1.0 for agricultural topics
