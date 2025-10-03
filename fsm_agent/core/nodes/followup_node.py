@@ -69,7 +69,6 @@ class FollowupNode(BaseNode):
             previous_node = state.get("previous_node", "")
             classification_results = state.get("classification_results")
             prescription_data = state.get("prescription_data")
-            vendor_options = state.get("vendor_options")
             
             # If we just completed classification and have results, don't re-classify
             if previous_node == "classifying" and classification_results:
@@ -80,11 +79,6 @@ class FollowupNode(BaseNode):
             elif previous_node == "prescribing" and prescription_data:
                 logger.info(f"🚫 Preventing infinite loop: Prescription just completed, showing results instead of re-prescribing")
                 self._handle_prescription_complete_followup(state)
-                
-            # If we just completed vendor query and have options, don't re-query
-            elif previous_node in ["show_vendors", "vendor_query"] and vendor_options:
-                logger.info(f"🚫 Preventing infinite loop: Vendor query just completed, showing results instead of re-querying")
-                self._handle_vendor_complete_followup(state)
                 
             # If insurance node just prompted for missing info, handle appropriately
             elif previous_node == "insurance" and state.get("requires_user_input"):
@@ -108,8 +102,6 @@ class FollowupNode(BaseNode):
                 elif followup_intent["action"] == "prescribe":
                     await self._handle_prescribe_action(state)
                         
-                elif followup_intent["action"] == "show_vendors":
-                    self._handle_show_vendors_action(state)
                         
                 elif followup_intent["action"] == "attention_overlay":
                     await self._handle_attention_overlay_action(state, followup_intent)
@@ -203,15 +195,6 @@ class FollowupNode(BaseNode):
         """Handle prescription action - always route to prescribing node, let it handle classification checks"""
         logger.info("💊 Routing to prescribing node for prescription processing")
         state["next_action"] = "prescribe"
-    
-    def _handle_show_vendors_action(self, state: WorkflowState) -> None:
-        """Handle show vendors action"""
-        if state.get("prescription_data"):
-            state["next_action"] = "show_vendors"
-        else:
-            state["next_action"] = "prescribe_first"
-            add_message_to_state(state, "assistant", "💊 I need to generate treatment recommendations first. Let me analyze your plant image.")
-            state["requires_user_input"] = True
     
     async def _handle_attention_overlay_action(self, state: WorkflowState, followup_intent: Dict[str, Any]) -> None:
         """Handle attention overlay action"""
@@ -500,8 +483,6 @@ Respond with ONLY a JSON object:
                 await self._handle_classify_action(state)
             elif followup_intent["action"] == "prescribe":
                 await self._handle_prescribe_action(state)
-            elif followup_intent["action"] == "show_vendors":
-                self._handle_show_vendors_action(state)
             elif followup_intent["action"] == "direct_response":
                 self._handle_direct_response_action(state, followup_intent)
             else:
@@ -605,7 +586,6 @@ Respond with ONLY a JSON object:
 • **New diagnosis** - Upload a new plant image
 • **Review results** - Look at previous diagnosis or prescription
 • **Show attention overlay** - See where the AI focused during diagnosis
-• **Find vendors** - Get vendor options for treatments
 • **Ask questions** - Any plant care related questions
 
 What would you like to do next?"""
@@ -626,7 +606,6 @@ What would you like to do next?"""
 
 What would you like to do next?
 • **Get treatment recommendations** - I can suggest specific treatments
-• **Find vendors** - Locate suppliers for treatments  
 • **Ask questions** - Any questions about the diagnosis
 • **Upload another image** - Analyze a different plant
 
@@ -643,27 +622,8 @@ What's your next step?"""
 I've provided detailed treatment recommendations for your plant.
 
 What would you like to do next?
-• **Find vendors** - Locate suppliers for the recommended treatments
 • **Ask questions** - Any questions about the treatment plan
 • **Get monitoring advice** - Learn how to track treatment progress
-• **Upload another image** - Analyze a different plant
-
-What's your next step?"""
-        
-        add_message_to_state(state, "assistant", completion_msg)
-        state["next_action"] = "completed"  # End workflow, wait for user's next choice
-        state["requires_user_input"] = True
-    
-    def _handle_vendor_complete_followup(self, state: WorkflowState) -> None:
-        """Handle followup after vendor query completes to prevent infinite loops"""
-        completion_msg = """✅ **Vendor Information Complete!**
-        
-I've provided supplier information for your plant treatments.
-
-What would you like to do next?
-• **Ask questions** - Any questions about the vendors or treatments
-• **Get application guidance** - Learn how to apply the treatments
-• **Monitor treatment** - Track your plant's recovery progress  
 • **Upload another image** - Analyze a different plant
 
 What's your next step?"""
@@ -679,7 +639,6 @@ What's your next step?"""
 
 • **Upload new plant images** for diagnosis
 • **Ask about treatment progress** and monitoring
-• **Request vendor information** for treatments
 • **Get seasonal care advice** and tips
 
 What would you like to know more about?"""
@@ -702,9 +661,6 @@ What would you like to know more about?"""
             
             if state.get("prescription_data"):
                 context_info.append(f"- Already have treatment recommendations")
-            
-            if state.get("vendor_options"):
-                context_info.append(f"- Already have vendor information")
             
             if state.get("insurance_recommendations"):
                 context_info.append(f"- Already have insurance recommendations")
@@ -744,7 +700,6 @@ What would you like to know more about?"""
         return f"""You are analyzing a user's followup message in a comprehensive agricultural assistance system that provides:
 - Plant disease diagnosis and classification
 - Treatment recommendations and prescriptions  
-- Agricultural vendor/supplier services
 - Crop insurance services (premium calculation, policy recommendations, company comparisons)
 - General agricultural guidance
 
@@ -754,7 +709,7 @@ Current workflow context:
 User's message: "{user_message}"
 
 Analyze the user's intent and respond with ONLY a JSON object containing:
-- action: One of ["classify", "prescribe", "show_vendors", "insurance", "attention_overlay", "restart", "complete", "direct_response", "out_of_scope"]
+- action: One of ["classify", "prescribe", "insurance", "attention_overlay", "restart", "complete", "direct_response", "out_of_scope"]
 - response: (string) If action is "direct_response", provide a helpful answer to their question. Otherwise, leave empty.
 - overlay_type: (string) If action is "attention_overlay", specify "show_overlay" or "overlay_info". Otherwise, leave empty.
 - confidence: (number 0-1) How confident you are in this classification.
@@ -764,7 +719,6 @@ Analyze the user's intent and respond with ONLY a JSON object containing:
 Action meanings:
 - "classify": User wants disease diagnosis/classification
 - "prescribe": User wants treatment recommendations, dosage info, application instructions  
-- "show_vendors": User wants to find/buy AGRICULTURAL PRODUCTS (pesticides, fertilizers, equipment, supplies) or vendors
 - "insurance": User wants crop insurance services (premium calculation, recommendations, companies, coverage) - WE PROVIDE THESE SERVICES
 - "attention_overlay": User wants to see diagnostic attention overlay/heatmap
 - "restart": User wants to start over with new diagnosis
@@ -775,14 +729,12 @@ Action meanings:
 Guidelines:
 1. INSURANCE REQUESTS: If they ask about insurance, premium, coverage, policy, insurance cost, insurance companies - ALWAYS use "insurance" action (WE PROVIDE FULL INSURANCE SERVICES)
 2. TREATMENT REQUESTS: If they ask about dosage, application, treatment instructions - use "prescribe" if no prescription exists, otherwise "direct_response" with detailed answer using available prescription data
-3. VENDOR REQUESTS: If they ask about buying AGRICULTURAL PRODUCTS (pesticides, fertilizers, equipment, supplies), purchasing suppliers, vendors, where to get farming products - use "show_vendors" (NOT for insurance buying)
-4. CLASSIFICATION REQUESTS: If they ask about disease diagnosis, upload new image, identify disease - use "classify"
-5. General agriculture questions (soil, weather, growing tips) - use "direct_response"  
-6. Clarifications about previous results - use "direct_response"
-7. Be flexible with natural language - "yes give me dosage" means they want prescription/dosage info
-8. IMPORTANT: For insurance keywords (insurance, premium, coverage, cost, policy, companies), ALWAYS route to "insurance" - never use "direct_response"
-9. CRITICAL: "Buy insurance" = "insurance" action, "Buy pesticides" = "show_vendors" action - Context matters!
-10. SCOPE DETECTION: 
+3. CLASSIFICATION REQUESTS: If they ask about disease diagnosis, upload new image, identify disease - use "classify"
+4. General agriculture questions (soil, weather, growing tips) - use "direct_response"  
+5. Clarifications about previous results - use "direct_response"
+6. Be flexible with natural language - "yes give me dosage" means they want prescription/dosage info
+7. IMPORTANT: For insurance keywords (insurance, premium, coverage, cost, policy, companies), ALWAYS route to "insurance" - never use "direct_response"
+8. SCOPE DETECTION: 
     - Use "out_of_scope" for questions about: technology, human medicine, entertainment, vehicles, cooking, general weather, etc.
     - is_agriculture_related=false and scope_confidence=0.1-0.3 for clearly non-agricultural topics
     - is_agriculture_related=true and scope_confidence=0.7-1.0 for agricultural topics
