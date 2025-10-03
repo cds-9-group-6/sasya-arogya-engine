@@ -314,6 +314,339 @@ class TestLLMContextualNextSteps(unittest.TestCase):
         # Should contain last 2 user messages
         expected_summary = "What treatment do you recommend? | How do I apply the fungicide?"
         self.assertEqual(context["conversation_summary"], expected_summary)
+
+
+class TestServiceErrorHandling(unittest.TestCase):
+    """Test suite for service error handling and failure detection"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        self.completed_node = CompletedNode()
+        
+        # Base state and context templates
+        self.base_state = {
+            "session_id": "test-session",
+            "current_node": "completed",
+            "messages": []
+        }
+        
+        self.base_context = {
+            "services_count": 1,
+            "services_list": [],
+            "state": {}
+        }
+    
+    def create_error_context(self, service: str, state_overrides: dict = None, context_overrides: dict = None):
+        """Helper to create context with error conditions"""
+        state = self.base_state.copy()
+        if state_overrides:
+            state.update(state_overrides)
+            
+        context = self.base_context.copy()
+        context["services_list"] = [service]
+        context["state"] = state
+        if context_overrides:
+            context.update(context_overrides)
+            
+        return context
+    
+    def test_classification_error_detection(self):
+        """Test detection of classification errors"""
+        # Test general error state
+        context = self.create_error_context("classification", {
+            "error_message": "Classification model unavailable"
+        })
+        
+        error_info = self.completed_node._check_service_errors("classification", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("PLANT DIAGNOSIS ERROR", title)
+        self.assertIn("Classification model unavailable", message)
+        
+        # Test no results scenario
+        context = self.create_error_context("classification", {
+            # No classification_results or disease_name
+        })
+        
+        error_info = self.completed_node._check_service_errors("classification", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("PLANT DIAGNOSIS INCOMPLETE", title)
+        self.assertIn("Disease analysis could not be completed", message)
+        
+        # Test tool-specific error
+        context = self.create_error_context("classification", {
+            "tool_results": {
+                "classification": {"error": "Image processing failed"}
+            }
+        })
+        
+        error_info = self.completed_node._check_service_errors("classification", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("PLANT DIAGNOSIS FAILED", title)
+        self.assertIn("Image processing failed", message)
+    
+    def test_prescription_error_detection(self):
+        """Test detection of prescription errors"""
+        # Test no results scenario
+        context = self.create_error_context("prescription", {
+            # No prescription_data or treatment_recommendations
+        })
+        
+        error_info = self.completed_node._check_service_errors("prescription", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("TREATMENT RECOMMENDATIONS INCOMPLETE", title)
+        self.assertIn("Treatment recommendations could not be generated", message)
+        
+        # Test tool-specific error
+        context = self.create_error_context("prescription", {
+            "tool_results": {
+                "prescription": {"error": "LLM service timeout"}
+            }
+        })
+        
+        error_info = self.completed_node._check_service_errors("prescription", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("TREATMENT RECOMMENDATIONS FAILED", title)
+        self.assertIn("LLM service timeout", message)
+    
+    def test_insurance_error_detection(self):
+        """Test detection of insurance (MCP) errors"""
+        # Test no results scenario (MCP server unavailable)
+        context = self.create_error_context("insurance", {
+            # No insurance data fields
+        })
+        
+        error_info = self.completed_node._check_service_errors("insurance", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("CROP INSURANCE INCOMPLETE", title)
+        self.assertIn("Insurance service is currently unavailable", message)
+        
+        # Test MCP server specific error
+        context = self.create_error_context("insurance", {
+            "tool_results": {
+                "insurance": {"error": "MCP server connection failed"}
+            }
+        })
+        
+        error_info = self.completed_node._check_service_errors("insurance", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("CROP INSURANCE TEMPORARILY UNAVAILABLE", title)
+        self.assertIn("technical difficulties", message)
+        
+        # Test generic insurance error
+        context = self.create_error_context("insurance", {
+            "tool_results": {
+                "insurance": {"error": "Invalid farmer credentials"}
+            }
+        })
+        
+        error_info = self.completed_node._check_service_errors("insurance", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("CROP INSURANCE FAILED", title)
+        self.assertIn("Invalid farmer credentials", message)
+    
+    def test_successful_service_no_errors(self):
+        """Test that successful services don't trigger error detection"""
+        # Classification success
+        context = self.create_error_context("classification", {
+            "classification_results": {"confidence": 0.85},
+            "disease_name": "tomato_blight"
+        })
+        
+        error_info = self.completed_node._check_service_errors("classification", context)
+        self.assertIsNone(error_info)
+        
+        # Prescription success
+        context = self.create_error_context("prescription", {
+            "prescription_data": {"treatments": ["Fungicide A"]},
+            "treatment_recommendations": [{"name": "Treatment 1"}]
+        })
+        
+        error_info = self.completed_node._check_service_errors("prescription", context)
+        self.assertIsNone(error_info)
+        
+        # Insurance success
+        context = self.create_error_context("insurance", {
+            "insurance_premium_details": {"premium": 5000},
+            "insurance_recommendations": {"policy": "Crop Shield"}
+        })
+        
+        error_info = self.completed_node._check_service_errors("insurance", context)
+        self.assertIsNone(error_info)
+    
+    def test_single_service_summary_with_errors(self):
+        """Test single service summary shows error messages instead of success"""
+        # Test classification error
+        context = self.create_error_context("classification", {
+            "error_message": "Model loading failed"
+        }, {
+            "disease_name": "tomato_blight",  # This data exists but error occurred
+            "plant_type": "tomato"
+        })
+        
+        title, summary = self.completed_node._get_single_service_summary("classification", context)
+        self.assertIn("⚠️", title)
+        self.assertIn("Model loading failed", summary)
+        
+        # Test insurance MCP error
+        context = self.create_error_context("insurance", {
+            "tool_results": {
+                "insurance": {"error": "MCP server timeout"}
+            }
+        }, {
+            "farmer_name": "John",
+            "crop": "wheat"
+        })
+        
+        title, summary = self.completed_node._get_single_service_summary("insurance", context)
+        self.assertIn("⚠️", title)
+        self.assertIn("temporarily unavailable", summary.lower())
+    
+    def test_multiple_services_mixed_results(self):
+        """Test multiple services with mixed success/failure"""
+        # Classification succeeds, prescription fails, insurance succeeds
+        state = {
+            "classification_results": {"confidence": 0.9},
+            "disease_name": "wheat_rust",
+            # No prescription data - prescription failed
+            "insurance_premium_details": {"premium": 6000}
+        }
+        
+        context = {
+            "services_list": ["classification", "prescription", "insurance"],
+            "state": state,
+            "disease_name": "wheat_rust",
+            "treatment_count": 0,  # No treatments due to failure
+            "insurance_type": "premium calculation"
+        }
+        
+        summary = self.completed_node._get_multiple_services_summary(
+            ["classification", "prescription", "insurance"], 
+            context
+        )
+        
+        # Should mention successes and failures
+        self.assertIn("diagnosed wheat_rust", summary)
+        self.assertIn("handled crop premium calculation", summary)
+        self.assertIn("treatment recommendations encountered issues", summary)
+        self.assertIn("retry", summary.lower())
+    
+    def test_error_priority_over_success_data(self):
+        """Test that errors are detected even when success data exists"""
+        # Scenario: Data exists in state but error also occurred
+        context = self.create_error_context("insurance", {
+            "insurance_premium_details": {"premium": 5000},  # Data exists
+            "error_message": "Payment processing failed"  # But error occurred
+        })
+        
+        error_info = self.completed_node._check_service_errors("insurance", context)
+        self.assertIsNotNone(error_info)
+        title, message = error_info
+        self.assertIn("⚠️", title)
+        self.assertIn("Payment processing failed", message)
+
+
+class TestErrorNodeImprovements(unittest.TestCase):
+    """Test suite for improved error node user-friendly messages"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        from fsm_agent.core.nodes.error_node import ErrorNode
+        self.error_node = ErrorNode()
+    
+    def test_mcp_server_error_formatting(self):
+        """Test MCP server error gets user-friendly message"""
+        error_msg = "Sasya Arogya MCP server not available"
+        
+        formatted = self.error_node._format_user_friendly_error(error_msg)
+        
+        self.assertIn("INSURANCE SERVICE TEMPORARILY UNAVAILABLE", formatted)
+        self.assertIn("technical difficulties", formatted)
+        self.assertIn("try again in a few minutes", formatted)
+        self.assertNotIn("MCP", formatted)  # Technical jargon removed
+        self.assertNotIn("Sasya Arogya", formatted)  # Internal names removed
+    
+    def test_model_loading_error_formatting(self):
+        """Test ML model error gets user-friendly message"""
+        error_msg = "Classification model loading failed"
+        
+        formatted = self.error_node._format_user_friendly_error(error_msg)
+        
+        self.assertIn("PLANT DIAGNOSIS TEMPORARILY UNAVAILABLE", formatted)
+        self.assertIn("being updated", formatted)
+        self.assertIn("try uploading your plant image again", formatted)
+    
+    def test_image_processing_error_formatting(self):
+        """Test image processing error gets user-friendly message"""
+        error_msg = "Image processing failed - invalid format"
+        
+        formatted = self.error_node._format_user_friendly_error(error_msg)
+        
+        self.assertIn("IMAGE PROCESSING ISSUE", formatted)
+        self.assertIn("clearer photo", formatted)
+        self.assertIn("good lighting", formatted)
+    
+    def test_connection_error_formatting(self):
+        """Test connection error gets user-friendly message"""
+        error_msg = "Connection timeout to external service"
+        
+        formatted = self.error_node._format_user_friendly_error(error_msg)
+        
+        self.assertIn("CONNECTION ISSUE", formatted)
+        self.assertIn("connectivity issues", formatted)
+        self.assertIn("check your internet connection", formatted)
+    
+    def test_llm_service_error_formatting(self):
+        """Test LLM service error gets user-friendly message"""
+        error_msg = "LLM generation service unavailable"
+        
+        formatted = self.error_node._format_user_friendly_error(error_msg)
+        
+        self.assertIn("AI SERVICE TEMPORARILY UNAVAILABLE", formatted)
+        self.assertIn("AI-powered recommendation system", formatted)
+        self.assertIn("try again in a few minutes", formatted)
+    
+    def test_generic_error_formatting(self):
+        """Test generic error gets appropriate message"""
+        error_msg = "Unexpected database connection failed"
+        
+        formatted = self.error_node._format_user_friendly_error(error_msg)
+        
+        self.assertIn("TEMPORARY SERVICE ISSUE", formatted)
+        self.assertIn("technical issue", formatted)
+        self.assertIn("Unexpected database connection failed", formatted)  # Original error included
+        self.assertIn("try your request again", formatted)
+    
+    def test_unknown_error_formatting(self):
+        """Test completely unknown error gets fallback message"""
+        error_msg = "Something completely unexpected happened"
+        
+        formatted = self.error_node._format_user_friendly_error(error_msg)
+        
+        self.assertIn("UNEXPECTED ERROR", formatted)
+        self.assertIn("Something completely unexpected happened", formatted)
+        self.assertIn("contact support", formatted)
+    
+    def test_mcp_variations_detected(self):
+        """Test different MCP error message variations are detected"""
+        variations = [
+            "MCP server connection failed",
+            "Sasya Arogya MCP server not available", 
+            "mcp server timeout",
+            "MCP Server unreachable"
+        ]
+        
+        for error_msg in variations:
+            formatted = self.error_node._format_user_friendly_error(error_msg)
+            self.assertIn("INSURANCE SERVICE TEMPORARILY UNAVAILABLE", formatted)
+            self.assertNotIn("MCP", formatted)
     
     def test_empty_response_handling(self):
         """Test handling of empty or invalid LLM responses"""
