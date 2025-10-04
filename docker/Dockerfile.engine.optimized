@@ -50,6 +50,7 @@ RUN --mount=type=cache,target=/pip-cache \
 COPY ./fsm_agent ./fsm_agent
 COPY ./ml ./ml
 COPY ./core ./core
+COPY ./observability ./observability
 
 # Create empty __init__.py for package structure
 RUN touch ./__init__.py
