@@ -269,7 +269,7 @@ class CNNWithAttentionClassifier(Layer):
             prediction_probability = prediction[0][predicted_class_index]
 
             # Transform to Kisan CC label
-            kissan_cc_class_label = LABEL_MAPPINGS.get(predicted_class_label, predicted_class_label)
+            # kissan_cc_class_label = LABEL_MAPPINGS.get(predicted_class_label, predicted_class_label)
             
             # Generate attention visualization (synchronously)
             attention_overlay_b64 = self._generate_attention_overlay_sync(image, TARGET_IMG_SIZE)
@@ -277,7 +277,7 @@ class CNNWithAttentionClassifier(Layer):
             # Return complete results
             return {
                 "success": True,
-                "disease_name": kissan_cc_class_label,
+                "disease_name": predicted_class_label,
                 "confidence": float(prediction_probability),
                 "raw_class_label": predicted_class_label,
                 "attention_overlay": attention_overlay_b64,

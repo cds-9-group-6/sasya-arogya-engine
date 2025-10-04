@@ -234,6 +234,20 @@ def set_error(state: WorkflowState, error_message: str) -> None:
     add_message_to_state(state, "system", f"Error: {error_message}")
 
 
+def clear_error(state: WorkflowState) -> None:
+    """
+    Clear error state when operations succeed
+    
+    Args:
+        state: Current workflow state
+    """
+    if "error_message" in state:
+        del state["error_message"]
+    if "retry_count" in state:
+        del state["retry_count"]
+    # Don't change next_action here as it might be set to something else
+
+
 def can_retry(state: WorkflowState) -> bool:
     """
     Check if operation can be retried

@@ -4,7 +4,7 @@ Final state with follow-up questions
 """
 
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 
 from .base_node import BaseNode
@@ -48,8 +48,8 @@ class CompletedNode(BaseNode):
         services_used = self._analyze_services_used(state)
         completion_context = self._create_completion_context(state, services_used)
         
-        # Generate relevant follow-ups based on actual services used
-        follow_ups = self._generate_contextual_follow_ups(state, services_used)
+        # Generate relevant follow-ups using LLM-driven contextual next steps
+        follow_ups = self._generate_contextual_next_steps(state)
         
         # Create contextual completion message based on what actually happened
         if existing_response and existing_response.strip() and previous_node == "followup":
@@ -57,7 +57,7 @@ class CompletedNode(BaseNode):
             completion_message = self._create_clean_followup_response(existing_response, follow_ups)
         elif existing_response and existing_response.strip():
             # Tool workflow completed - add follow-up options without ugly formatting
-            completion_message = self._create_clean_workflow_completion(existing_response, follow_ups)
+            completion_message = self._create_clean_workflow_completion(existing_response, follow_ups, state)
         else:
             # No direct response - show contextual completion message based on services used
             completion_message = self._create_contextual_completion_message(services_used, completion_context, follow_ups)
@@ -85,15 +85,15 @@ class CompletedNode(BaseNode):
             "classification": bool(state.get("classification_results") or state.get("disease_name")),
             "prescription": bool(state.get("prescription_data") or state.get("treatment_recommendations")),
             "insurance": bool(state.get("insurance_context") or state.get("insurance_premium_details") 
-                           or state.get("insurance_recommendations") or state.get("insurance_companies")),
-            "vendors": bool(state.get("vendor_options") or state.get("selected_vendor"))
+                           or state.get("insurance_recommendations") or state.get("insurance_companies"))
         }
     
     def _create_completion_context(self, state: WorkflowState, services_used: Dict[str, bool]) -> Dict[str, Any]:
         """Create context summary of what happened in this session"""
         context = {
             "services_count": sum(services_used.values()),
-            "services_list": [service for service, used in services_used.items() if used]
+            "services_list": [service for service, used in services_used.items() if used],
+            "state": state  # Pass state for error checking
         }
         
         # Extract key details for each service used
@@ -109,10 +109,6 @@ class CompletedNode(BaseNode):
             context["farmer_name"] = state.get("farmer_name", "Farmer")
             context["crop"] = state.get("plant_type") or "your crop"
             context["insurance_type"] = "recommendation" if state.get("insurance_recommendations") else "premium calculation"
-            
-        if services_used["vendors"]:
-            vendors = state.get("vendor_options", [])
-            context["vendor_count"] = len(vendors)
         
         return context
     
@@ -124,7 +120,7 @@ class CompletedNode(BaseNode):
         if services_count == 0:
             # No specific services used - general help
             title = "✅ **HOW CAN I HELP YOU?**"
-            summary = "I'm here to help with plant disease diagnosis, treatment recommendations, crop insurance, and finding suppliers."
+            summary = "I'm here to help with plant disease diagnosis, treatment recommendations, and crop insurance."
         elif services_count == 1:
             # Single service used
             service = services_list[0]
@@ -151,7 +147,13 @@ class CompletedNode(BaseNode):
         return completion_message
     
     def _get_single_service_summary(self, service: str, context: Dict[str, Any]) -> Tuple[str, str]:
-        """Get title and summary for single service completion"""
+        """Get title and summary for single service completion - checks for errors first"""
+        # First check if there are any errors for this service
+        error_info = self._check_service_errors(service, context)
+        if error_info:
+            return error_info
+            
+        # Only show success if no errors detected
         if service == "classification":
             disease = context.get("disease_name", "disease")
             plant = context.get("plant_type", "plant") or "plant"
@@ -167,37 +169,146 @@ class CompletedNode(BaseNode):
             insurance_type = context.get("insurance_type", "insurance") or "services"
             return f"✅ **YOUR CROP INSURANCE {insurance_type.upper()} COMPLETE**", f"We provided {farmer} with {insurance_type} for {crop} cultivation. Your insurance details are ready."
             
-        elif service == "vendors":
-            vendor_count = context.get("vendor_count", 0)
-            return "✅ **YOUR SUPPLIER SEARCH COMPLETE**", f"We found {vendor_count} suppliers for your agricultural needs with contact information and pricing."
-            
         else:
             return "✅ **SERVICE COMPLETED**", "We've completed your request and provided the information you needed."
     
+    def _check_service_errors(self, service: str, context: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+        """Check if a service has errors based on current operation evidence, not persistent error state"""
+        state = context.get("state")
+        if not state:
+            return None
+            
+        # REMOVED: Don't check persistent error_message - focus on current operation evidence
+        # This prevents false errors when previous operations failed but current ones succeeded
+        
+        # Check tool results for service-specific errors (current operation evidence)
+        tool_results = state.get("tool_results", {})
+        
+        if service == "classification":
+            # Check if classification actually succeeded
+            if not state.get("classification_results") and not state.get("disease_name"):
+                return self._format_service_error(service, "Disease analysis could not be completed", "no_results")
+            
+            # Check for classification-specific errors in tool results
+            if "classification" in tool_results:
+                result = tool_results["classification"]
+                if isinstance(result, dict) and result.get("error"):
+                    return self._format_service_error(service, result["error"], "tool_error")
+                    
+        elif service == "prescription":
+            # Check if prescription actually succeeded
+            if not state.get("prescription_data") and not state.get("treatment_recommendations"):
+                return self._format_service_error(service, "Treatment recommendations could not be generated", "no_results")
+                
+            # Check for prescription-specific errors
+            if "prescription" in tool_results:
+                result = tool_results["prescription"]
+                if isinstance(result, dict) and result.get("error"):
+                    return self._format_service_error(service, result["error"], "tool_error")
+                    
+        elif service == "insurance":
+            # Check if insurance operation actually succeeded
+            has_insurance_data = any([
+                state.get("insurance_premium_details"),
+                state.get("insurance_recommendations"),
+                state.get("insurance_companies"),
+                state.get("insurance_certificate")
+            ])
+            
+            if not has_insurance_data:
+                return self._format_service_error(service, "Insurance service is currently unavailable", "no_results")
+                
+            # Check for insurance-specific errors (MCP server issues)
+            if "insurance" in tool_results:
+                result = tool_results["insurance"]
+                if isinstance(result, dict) and result.get("error"):
+                    error_msg = result["error"]
+                    if "mcp" in error_msg.lower() or "server" in error_msg.lower():
+                        return self._format_service_error(service, "Insurance service is temporarily unavailable", "mcp_error")
+                    else:
+                        return self._format_service_error(service, error_msg, "tool_error")
+        
+        return None  # No errors detected
+    
+    def _format_service_error(self, service: str, error_msg: str, error_type: str) -> Tuple[str, str]:
+        """Format appropriate error message for service failures"""
+        service_names = {
+            "classification": "Plant Diagnosis",
+            "prescription": "Treatment Recommendations", 
+            "insurance": "Crop Insurance"
+        }
+        
+        service_name = service_names.get(service, "Service")
+        
+        if error_type == "mcp_error":
+            title = f"⚠️ **{service_name.upper()} TEMPORARILY UNAVAILABLE**"
+            message = f"Our insurance service is currently experiencing technical difficulties. Please try again in a few minutes or contact support if the issue persists."
+            
+        elif error_type == "no_results":
+            title = f"⚠️ **{service_name.upper()} INCOMPLETE**"
+            message = f"{error_msg}. Please try uploading a clearer image or providing more details, then retry the operation."
+            
+        elif error_type == "tool_error":
+            title = f"⚠️ **{service_name.upper()} FAILED**"
+            message = f"We encountered an issue: {error_msg}. Please try again or contact support if the problem continues."
+            
+        else:  # general error
+            title = f"⚠️ **{service_name.upper()} ERROR**"
+            message = f"An error occurred: {error_msg}. Please try again or contact support for assistance."
+            
+        return title, message
+    
     def _get_multiple_services_summary(self, services_list: List[str], context: Dict[str, Any]) -> str:
-        """Get summary for multiple services completion"""
-        summaries = []
+        """Get summary for multiple services completion - handles mixed success/failure scenarios"""
+        successes = []
+        failures = []
         
-        if "classification" in services_list:
-            disease = context.get("disease_name", "disease")
-            summaries.append(f"diagnosed {disease}")
+        # Check each service for success or failure
+        for service in services_list:
+            error_info = self._check_service_errors(service, context)
             
-        if "prescription" in services_list:
-            treatment_count = context.get("treatment_count", 0)
-            summaries.append(f"provided {treatment_count} treatments")
-            
-        if "insurance" in services_list:
-            insurance_type = context.get("insurance_type", "insurance services")
-            summaries.append(f"handled crop {insurance_type}")
-            
-        if "vendors" in services_list:
-            vendor_count = context.get("vendor_count", 0)
-            summaries.append(f"found {vendor_count} suppliers")
+            if error_info:
+                # Service failed
+                service_names = {
+                    "classification": "plant diagnosis",
+                    "prescription": "treatment recommendations", 
+                    "insurance": "insurance services"
+                }
+                service_name = service_names.get(service, service)
+                failures.append(service_name)
+            else:
+                # Service succeeded
+                if service == "classification":
+                    disease = context.get("disease_name", "disease")
+                    successes.append(f"diagnosed {disease}")
+                elif service == "prescription":
+                    treatment_count = context.get("treatment_count", 0)
+                    successes.append(f"provided {treatment_count} treatments")
+                elif service == "insurance":
+                    insurance_type = context.get("insurance_type", "insurance services")
+                    successes.append(f"handled crop {insurance_type}")
         
-        if len(summaries) > 1:
-            return f"We {', '.join(summaries[:-1])} and {summaries[-1]} for you."
+        # Build summary message based on successes and failures
+        if successes and failures:
+            # Mixed scenario - some succeeded, some failed
+            success_part = f"We {', '.join(successes[:-1])} and {successes[-1]}" if len(successes) > 1 else f"We {successes[0]}"
+            failure_part = f"However, {', '.join(failures)} encountered issues"
+            return f"{success_part} for you. {failure_part}. Please retry the failed operations."
+            
+        elif successes:
+            # All succeeded
+            if len(successes) > 1:
+                return f"We {', '.join(successes[:-1])} and {successes[-1]} for you."
+            else:
+                return f"We {successes[0]} for you."
+                
+        elif failures:
+            # All failed (shouldn't normally happen, but handle gracefully)
+            return f"We encountered issues with {', '.join(failures)}. Please try again or contact support."
+            
         else:
-            return f"We {summaries[0]} for you."
+            # Fallback
+            return "We processed your request."
     
     def _get_contextual_help_section(self, services_used: Dict[str, bool]) -> str:
         """Get contextual help section based on services used"""
@@ -213,12 +324,6 @@ class CompletedNode(BaseNode):
             help_items.extend([
                 "Get insurance for additional crops",
                 "Calculate premiums for different areas"
-            ])
-            
-        if services_used["vendors"]:
-            help_items.extend([
-                "Find suppliers in different locations",
-                "Get pricing for other products"
             ])
         
         # Add general help items
@@ -244,13 +349,15 @@ class CompletedNode(BaseNode):
         
         # Add minimal follow-up options only if needed
         if follow_ups:
-            clean_message += f"\n\n💡 **Next steps**: {', '.join(follow_ups[:2])}"
+            clean_message += "\n\n💡 **Next steps**:"
+            for follow_up in follow_ups[:2]:
+                clean_message += f"\n• {follow_up}"
         else:
             clean_message += "\n\n💡 **Ask me anything else about your plants!**"
             
         return clean_message
     
-    def _create_clean_workflow_completion(self, workflow_response: str, follow_ups: List[str]) -> str:
+    def _create_clean_workflow_completion(self, workflow_response: str, follow_ups: List[str], state: WorkflowState) -> str:
         """Create clean completion for workflow tools (classification, prescription) without ugly formatting"""
         
         # FIXED: No ugly horizontal lines - just clean completion
@@ -262,136 +369,222 @@ class CompletedNode(BaseNode):
             for i, follow_up in enumerate(follow_ups[:3], 1):
                 clean_message += f"\n• {follow_up}"
         else:
-            clean_message += """
-• 📸 Upload another image for analysis
-• 💊 Get treatment recommendations 
-• 🛒 Find suppliers for treatments"""
+            # Generate contextual next steps based on what has been done
+            contextual_steps = self._generate_contextual_next_steps(state)
+            if contextual_steps:
+                for step in contextual_steps:
+                    clean_message += f"\n• {step}"
+            else:
+                clean_message += "\n\n💡 **Ask me anything else about your plants!**"
             
         return clean_message
     
-    def _generate_contextual_follow_ups(self, state: WorkflowState, services_used: Dict[str, bool]) -> List[str]:
-        """
-        Generate relevant follow-up questions based on services actually used
-        
-        Args:
-            state: Current workflow state
-            services_used: Dictionary of which services were used
+    def _generate_contextual_next_steps(self, state: WorkflowState) -> List[str]:
+        """Generate contextual next steps using LLM based on current workflow state"""
+        try:
+            # Get current workflow context
+            context = self._build_workflow_context(state)
             
-        Returns:
-            List of follow-up questions/suggestions (max 3)
-        """
-        follow_ups = []
+            # Use LLM to determine next steps
+            prompt = self._create_next_steps_prompt(context)
+            response = self.llm.invoke(prompt)
+            
+            # Parse LLM response to extract next steps
+            next_steps = self._parse_next_steps_response(response.content)
+            
+            # Return maximum 3 steps
+            return next_steps[:3]
+            
+        except Exception as e:
+            logger.error(f"Error generating contextual next steps: {e}")
+            # Fallback to basic next steps
+            return self._get_fallback_next_steps(state)
+    
+    def _build_workflow_context(self, state: WorkflowState) -> Dict[str, Any]:
+        """Build comprehensive workflow context for LLM"""
+        context = {
+            "completed_operations": {},
+            "available_data": {},
+            "user_context": {},
+            "conversation_summary": ""
+        }
         
-        # Extract previous user messages to avoid duplicating questions
+        # Track completed operations
+        context["completed_operations"] = {
+            "classification": bool(state.get("classification_results") or state.get("disease_name")),
+            "prescription": bool(state.get("prescription_data") or state.get("treatment_recommendations")),
+            "insurance": bool(state.get("insurance_premium_details") or state.get("insurance_recommendations") 
+                           or state.get("insurance_companies") or state.get("insurance_certificate"))
+        }
+        
+        # Extract available data details
+        if context["completed_operations"]["classification"]:
+            disease_name = state.get("disease_name", "")
+            is_healthy = disease_name.lower() in ["healthy", "healthy_plant"]
+            context["available_data"]["disease_info"] = {
+                "disease_name": disease_name,
+                "is_healthy": is_healthy,
+                "confidence": state.get("classification_results", {}).get("confidence", 0)
+            }
+            
+        if context["completed_operations"]["prescription"]:
+            treatments = state.get("treatment_recommendations", [])
+            context["available_data"]["treatment_info"] = {
+                "treatment_count": len(treatments),
+                "has_treatments": len(treatments) > 0
+            }
+            
+        if context["completed_operations"]["insurance"]:
+            context["available_data"]["insurance_info"] = {
+                "has_premium": bool(state.get("insurance_premium_details")),
+                "has_recommendations": bool(state.get("insurance_recommendations")),
+                "has_companies": bool(state.get("insurance_companies")),
+                "has_certificate": bool(state.get("insurance_certificate"))
+            }
+        
+        # User context
+        context["user_context"] = {
+            "plant_type": state.get("plant_type", ""),
+            "farmer_name": state.get("farmer_name", ""),
+            "location": state.get("location", "")
+        }
+        
+        # Recent conversation context
         messages = state.get("messages", [])
-        user_messages = [msg.get("content", "").lower() for msg in messages if msg.get("role") == "user"]
-        all_user_text = " ".join(user_messages)
+        recent_messages = messages[-4:] if len(messages) > 4 else messages
+        user_messages = [msg.get("content", "") for msg in recent_messages if msg.get("role") == "user"]
+        context["conversation_summary"] = " | ".join(user_messages[-2:]) if user_messages else ""
         
-        # Helper function to check if topic was already discussed
-        def already_asked(keywords: List[str]) -> bool:
-            return any(keyword.lower() in all_user_text for keyword in keywords)
-        
-        # Generate service-specific follow-ups based on what was actually used
-        if services_used["classification"]:
-            follow_ups.extend(self._get_classification_follow_ups(state, already_asked))
-            
-        if services_used["prescription"]:
-            follow_ups.extend(self._get_prescription_follow_ups(state, already_asked))
-            
-        if services_used["insurance"]:
-            follow_ups.extend(self._get_insurance_follow_ups(state, already_asked))
-            
-        if services_used["vendors"]:
-            follow_ups.extend(self._get_vendor_follow_ups(state, already_asked))
-        
-        # Add general follow-ups if no specific services or limited specific follow-ups
-        if len(follow_ups) < 2:
-            follow_ups.extend(self._get_general_follow_ups(state, services_used, already_asked))
-        
-        # Return max 3 unique follow-ups
-        return list(dict.fromkeys(follow_ups))[:3]
+        return context
     
-    def _get_classification_follow_ups(self, state: WorkflowState, already_asked) -> List[str]:
-        """Generate follow-ups for plant disease classification"""
-        follow_ups = []
-        disease_name = state.get("disease_name", "")
-        classification_results = state.get("classification_results", {})
-        confidence = classification_results.get("confidence", 0) * 100 if classification_results else 0
+    def _create_next_steps_prompt(self, context: Dict[str, Any]) -> str:
+        """Create prompt for LLM to determine contextual next steps"""
         
-        if disease_name and disease_name.lower() != "healthy":
-            if not already_asked(["treatment", "medicine", "prescription"]):
-                follow_ups.append("💊 Get treatment recommendations for this disease")
-            if not already_asked(["vendor", "supplier", "buy"]) and confidence >= 75:
-                follow_ups.append("🛒 Find suppliers for treatments")
+        # Build context description
+        context_desc = self._format_context_for_prompt(context)
+        
+        prompt = f"""You are an expert agricultural assistant helping farmers with plant disease diagnosis, treatment recommendations, and crop insurance services.
+
+CURRENT WORKFLOW CONTEXT:
+{context_desc}
+
+SERVICES WE PROVIDE:
+1. Plant Disease Classification - Analyze plant images to identify diseases
+2. Treatment Recommendations - Provide specific treatment plans and medicines  
+3. Crop Insurance Services - Calculate premiums, recommend policies, find companies, generate certificates
+4. General Agricultural Guidance - Soil health, weather tips, farming best practices
+
+TASK: Based on the current context, suggest 2-3 logical next steps that would be most helpful to the user.
+
+GUIDELINES:
+- Only suggest services we actually provide
+- Don't suggest operations that are already completed unless there's a good reason (like getting insurance for a different crop)
+- Consider the natural workflow progression 
+- Be contextually relevant to what the user has accomplished
+- Focus on actionable next steps, not just general advice
+- Use emojis to make suggestions engaging: 📸 🔍 💊 🛡️ 📋 📊 🌱 ❓
+
+RESPONSE FORMAT:
+Return ONLY a JSON array of 2-3 next step strings. Each string should be a clear, actionable suggestion.
+
+Example: ["💊 Get treatment recommendations for this disease", "🛡️ Calculate crop insurance premium for protection", "📸 Upload another plant image for analysis"]
+
+Response:"""
+
+        return prompt
+    
+    def _format_context_for_prompt(self, context: Dict[str, Any]) -> str:
+        """Format context information for the prompt"""
+        lines = []
+        
+        # Completed operations
+        completed = context["completed_operations"]
+        completed_list = [op for op, done in completed.items() if done]
+        if completed_list:
+            lines.append(f"✅ COMPLETED: {', '.join(completed_list)}")
         else:
-            if not already_asked(["prevention", "care", "maintenance"]):
-                follow_ups.append("🌱 Get preventive care tips")
+            lines.append("✅ COMPLETED: None (new session)")
+            
+        # Available data details
+        data = context["available_data"]
+        if "disease_info" in data:
+            disease = data["disease_info"]
+            status = "healthy" if disease["is_healthy"] else f"diseased ({disease['disease_name']})"
+            lines.append(f"🌿 PLANT STATUS: {status} (confidence: {disease['confidence']:.0%})")
+            
+        if "treatment_info" in data:
+            treatment = data["treatment_info"]
+            lines.append(f"💊 TREATMENT: {treatment['treatment_count']} recommendations provided")
+            
+        if "insurance_info" in data:
+            insurance = data["insurance_info"]
+            insurance_parts = []
+            if insurance["has_premium"]: insurance_parts.append("premium calculated")
+            if insurance["has_recommendations"]: insurance_parts.append("recommendations given")
+            if insurance["has_companies"]: insurance_parts.append("companies listed")
+            if insurance["has_certificate"]: insurance_parts.append("certificate generated")
+            if insurance_parts:
+                lines.append(f"🛡️ INSURANCE: {', '.join(insurance_parts)}")
                 
-        return follow_ups
-    
-    def _get_prescription_follow_ups(self, state: WorkflowState, already_asked) -> List[str]:
-        """Generate follow-ups for prescription/treatment"""
-        follow_ups = []
-        treatments = state.get("treatment_recommendations", [])
-        
-        if not already_asked(["vendor", "supplier", "buy"]):
-            follow_ups.append("🛒 Find suppliers for these treatments")
-        if not already_asked(["application", "dosage", "how to apply"]):
-            follow_ups.append("📋 Get application instructions")
-        if not already_asked(["monitor", "track", "effectiveness"]):
-            follow_ups.append("📊 Learn about treatment monitoring")
+        # User context
+        user = context["user_context"]
+        user_details = []
+        if user["plant_type"]: user_details.append(f"plant: {user['plant_type']}")
+        if user["farmer_name"]: user_details.append(f"farmer: {user['farmer_name']}")
+        if user["location"]: user_details.append(f"location: {user['location']}")
+        if user_details:
+            lines.append(f"👤 USER: {', '.join(user_details)}")
             
-        return follow_ups
-    
-    def _get_insurance_follow_ups(self, state: WorkflowState, already_asked) -> List[str]:
-        """Generate follow-ups for insurance services"""
-        follow_ups = []
-        farmer_name = state.get("farmer_name", "Farmer")
-        crop = state.get("plant_type", "crop")
-        
-        if not already_asked(["more insurance", "other crops", "additional"]):
-            follow_ups.append("🛡️ Get insurance for other crops")
-        if not already_asked(["companies", "compare", "rates"]):
-            follow_ups.append("🏢 Compare insurance companies")
-        if not already_asked(["certificate", "document", "policy"]):
-            follow_ups.append("📄 Generate insurance certificate")
+        # Recent conversation
+        if context["conversation_summary"]:
+            lines.append(f"💬 RECENT: {context['conversation_summary']}")
             
-        return follow_ups
+        return "\n".join(lines)
     
-    def _get_vendor_follow_ups(self, state: WorkflowState, already_asked) -> List[str]:
-        """Generate follow-ups for vendor/supplier services"""
-        follow_ups = []
-        vendor_count = len(state.get("vendor_options", []))
-        
-        if not already_asked(["pricing", "cost", "price"]):
-            follow_ups.append("💰 Compare vendor pricing")
-        if not already_asked(["location", "nearby", "delivery"]):
-            follow_ups.append("📍 Find vendors in other locations")
-        if not already_asked(["contact", "order", "purchase"]):
-            follow_ups.append("📞 Get vendor contact information")
+    def _parse_next_steps_response(self, response_content: str) -> List[str]:
+        """Parse LLM response to extract next steps"""
+        try:
+            import json
+            import re
             
-        return follow_ups
+            # Try to extract JSON array from response
+            json_match = re.search(r'\[.*?\]', response_content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+                next_steps = json.loads(json_str)
+                if isinstance(next_steps, list):
+                    return [step for step in next_steps if isinstance(step, str)]
+                    
+            # Fallback: try to extract bullet points
+            lines = response_content.split('\n')
+            steps = []
+            for line in lines:
+                line = line.strip()
+                # Look for bullet points or numbered items
+                if line.startswith(('•', '-', '*', '1.', '2.', '3.')):
+                    clean_step = re.sub(r'^[\s\-\*\•\d\.]+', '', line).strip()
+                    if clean_step:
+                        steps.append(clean_step)
+                        
+            return steps
+            
+        except Exception as e:
+            logger.error(f"Error parsing next steps response: {e}")
+            return []
     
-    def _get_general_follow_ups(self, state: WorkflowState, services_used: Dict[str, bool], already_asked) -> List[str]:
-        """Generate general follow-ups based on context and services not yet used"""
-        follow_ups = []
-        plant_type = state.get("plant_type", "")
-        location = state.get("location", "")
+    def _get_fallback_next_steps(self, state: WorkflowState) -> List[str]:
+        """Fallback next steps if LLM fails"""
+        fallback_steps = [
+            "📸 Upload another image for analysis",
+            "❓ Ask general questions about plant care"
+        ]
         
-        # Suggest services not yet used
-        if not services_used["classification"] and not already_asked(["analyze", "diagnose", "disease"]):
-            follow_ups.append("📸 Upload plant image for disease diagnosis")
-        if not services_used["insurance"] and not already_asked(["insurance", "protection"]):
-            follow_ups.append("🛡️ Get crop insurance quotes")
-        if not services_used["prescription"] and plant_type and not already_asked(["treatment", "care"]):
-            follow_ups.append(f"💊 Get care recommendations for {plant_type}")
-        if not services_used["vendors"] and not already_asked(["supplier", "buy"]):
-            follow_ups.append("🛒 Find agricultural suppliers")
-        
-        # General agricultural topics
-        if not already_asked(["weather", "season", "climate"]):
-            follow_ups.append("🌤️ Get weather-based farming advice")
-        if not already_asked(["soil", "nutrients", "fertilizer"]):
-            follow_ups.append("🧪 Learn about soil health")
+        # Add contextual fallback based on state
+        if not state.get("classification_results") and not state.get("disease_name"):
+            fallback_steps.insert(0, "🔍 Upload plant image for disease diagnosis")
+        elif state.get("disease_name") and not state.get("prescription_data"):
+            fallback_steps.insert(0, "💊 Get treatment recommendations")
+        elif not state.get("insurance_recommendations"):
+            fallback_steps.insert(0, "🛡️ Explore crop insurance options")
             
-        return follow_ups
+        return fallback_steps[:3]
