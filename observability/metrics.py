@@ -19,7 +19,7 @@ try:
         PeriodicExportingMetricReader,
     )
     from opentelemetry.exporter.prometheus import PrometheusMetricReader
-    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
     from opentelemetry.sdk.resources import Resource
     OTEL_AVAILABLE = True
 except ImportError:
