@@ -28,7 +28,7 @@ scrape_configs:
   # Sasya Engine FastAPI server
   - job_name: 'sasya-engine'
     static_configs:
-      - targets: ['host.docker.internal:9080']
+      - targets: ['host.docker.internal:8080']
     scrape_interval: 15s
     metrics_path: /metrics
     scrape_timeout: 10s

@@ -459,3 +459,23 @@ zipp==3.23.0
     # via importlib-metadata
 zstandard==0.24.0
     # via langsmith
+
+# OpenTelemetry Observability and Prometheus Support
+prometheus-client==0.21.1
+    # via observability/instrumentation
+opentelemetry-exporter-prometheus==0.58b0
+    # via observability/metrics - compatible with opentelemetry-sdk 1.37.0
+opentelemetry-instrumentation-fastapi==0.58b0
+    # via observability/instrumentation
+opentelemetry-instrumentation-requests==0.58b0
+    # via observability/instrumentation
+opentelemetry-instrumentation-httpx==0.58b0
+    # via observability/instrumentation
+opentelemetry-instrumentation-logging==0.58b0
+    # via observability/instrumentation
+opentelemetry-instrumentation-system-metrics==0.58b0
+    # via observability/instrumentation
+opentelemetry-instrumentation==0.58b0
+    # via observability base instrumentation
+opentelemetry-exporter-otlp-proto-grpc==1.37.0
+    # via observability/metrics - compatible with opentelemetry-sdk 1.37.0
