@@ -1,0 +1,81 @@
+stateDiagram-v2
+    [*] --> INITIAL: New Session
+    
+    %% Core Workflow
+    INITIAL --> CLASSIFYING: Image + Context
+    CLASSIFYING --> PRESCRIBING: Disease Found
+    PRESCRIBING --> INSURANCE: Treatment Ready
+    INSURANCE --> VENDOR_QUERY: Premium Calculated
+    VENDOR_QUERY --> SHOW_VENDORS: User Confirms
+    SHOW_VENDORS --> ORDER_BOOKING: Vendor Selected
+    ORDER_BOOKING --> COMPLETED: Order Complete
+    
+    %% Alternative Paths
+    INITIAL --> FOLLOWUP: Missing Info
+    CLASSIFYING --> FOLLOWUP: Need More Info
+    PRESCRIBING --> COMPLETED: No Further Action
+    INSURANCE --> COMPLETED: Insurance Only
+    VENDOR_QUERY --> COMPLETED: No Vendors
+    
+    %% Followup Handling
+    FOLLOWUP --> INITIAL: New Request
+    FOLLOWUP --> CLASSIFYING: Reclassify
+    FOLLOWUP --> PRESCRIBING: Regenerate
+    FOLLOWUP --> COMPLETED: Session End
+    
+    %% Error Handling
+    INITIAL --> ERROR: Invalid Input
+    CLASSIFYING --> ERROR: Classification Failed
+    ERROR --> [*]: Session Terminated
+    COMPLETED --> [*]: Session Complete
+    
+    %% State Descriptions
+    note right of INITIAL
+        Entry point with context extraction
+        and input validation
+    end note
+    
+    note right of CLASSIFYING
+        CNN disease classification
+        with confidence scoring
+    end note
+    
+    note right of PRESCRIBING
+        RAG-based treatment
+        recommendations
+    end note
+    
+    note right of INSURANCE
+        Premium calculation
+        and company comparison
+    end note
+    
+    note right of VENDOR_QUERY
+        User preference
+        confirmation
+    end note
+    
+    note right of SHOW_VENDORS
+        Display local vendors
+        and pricing options
+    end note
+    
+    note right of ORDER_BOOKING
+        Process order with
+        selected vendor
+    end note
+    
+    note right of FOLLOWUP
+        Handle additional
+        questions and navigation
+    end note
+    
+    note right of COMPLETED
+        Terminal state with
+        session summary
+    end note
+    
+    note right of ERROR
+        Error handling and
+        recovery mechanisms
+    end note

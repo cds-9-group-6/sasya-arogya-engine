@@ -1,0 +1,57 @@
+graph TB
+    subgraph "Client Authentication"
+        A[🔑 API Key]
+        B[🎫 JWT Token]
+        C[🔐 OAuth 2.0]
+        D[💳 Session Token]
+    end
+    
+    subgraph "API Security"
+        E[⚡ Rate Limiting]
+        F[✅ Input Validation]
+        G[🌐 CORS Protection]
+        H[🔒 HTTPS/TLS]
+    end
+    
+    subgraph "Data Protection"
+        I[🔐 Encryption at Rest]
+        J[🔒 Encryption in Transit]
+        K[👤 Data Anonymization]
+        L[📝 Access Logging]
+    end
+    
+    subgraph "Infrastructure Security"
+        M[🐳 Container Security]
+        N[🔒 Network Isolation]
+        O[🔐 Secrets Management]
+        P[🔍 Vulnerability Scanning]
+    end
+    
+    A --> E
+    B --> E
+    C --> E
+    D --> E
+    
+    E --> F
+    F --> G
+    G --> H
+    
+    H --> I
+    I --> J
+    J --> K
+    K --> L
+    
+    L --> M
+    M --> N
+    N --> O
+    O --> P
+    
+    classDef authLayer fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
+    classDef apiSecurityLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef dataProtectionLayer fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef infraSecurityLayer fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    
+    class A,B,C,D authLayer
+    class E,F,G,H apiSecurityLayer
+    class I,J,K,L dataProtectionLayer
+    class M,N,O,P infraSecurityLayer

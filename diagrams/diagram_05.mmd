@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant U as 👤 User
+    participant A as 🌐 API Gateway
+    participant F as 🔄 FSM Agent
+    participant I as 🧠 Intent Analyzer
+    participant C as 🔍 CNN Classifier
+    participant L as 🤖 LLM Server
+    participant R as 📚 RAG System
+    participant V as 🏪 Vendor Service
+    participant O as 📊 Observability
+    
+    U->>A: POST /chat-stream
+    A->>F: Process Message
+    F->>I: Analyze Intent
+    I->>L: Classify Intent
+    L-->>I: Intent Result
+    I-->>F: Intent + Context
+    
+    F->>C: Classify Disease (if image)
+    C->>L: Validate Classification
+    L-->>C: Validation Result
+    C-->>F: Disease + Confidence
+    
+    F->>R: Generate Prescription
+    R->>L: Generate Treatment
+    L-->>R: Treatment Plan
+    R-->>F: Prescription Data
+    
+    F->>V: Find Vendors
+    V-->>F: Vendor Options
+    F-->>A: Stream Response
+    A-->>U: Real-time Updates
+    
+    Note over O: All operations monitored
+    F->>O: Metrics & Traces
+    A->>O: Request Metrics
+    C->>O: ML Metrics
+    L->>O: LLM Metrics

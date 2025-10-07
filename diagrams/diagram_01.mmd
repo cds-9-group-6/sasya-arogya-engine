@@ -1,0 +1,103 @@
+graph TB
+    subgraph "Client Applications"
+        A[📱 Android Mobile App]
+        B[💻 Web Dashboard]
+        C[🔌 API Clients]
+        D[🤖 Third-party Integrations]
+    end
+    
+    subgraph "API Gateway Layer"
+        E[🌐 FastAPI Server :8080]
+        F[🔒 CORS & Security]
+        G[⚡ Rate Limiting]
+        H[🔑 Authentication]
+    end
+    
+    subgraph "Core Engine (Docker Container)"
+        I[🔄 LangGraph FSM Workflow]
+        J[🧠 Intent Analysis Engine]
+        K[💾 Session Management]
+        L[📊 State Persistence]
+    end
+    
+    subgraph "AI/ML Services"
+        M[🔍 CNN Disease Classifier]
+        N[👁️ LLaVA Vision Model]
+        O[🤖 Ollama LLM Server]
+        P[📚 RAG Prescription System]
+    end
+    
+    subgraph "External Services"
+        Q[🛡️ Insurance MCP Server]
+        R[🏪 Vendor Database]
+        S[🗃️ ChromaDB Vector Store]
+        T[📈 MLflow Tracking]
+    end
+    
+    subgraph "Observability Stack"
+        U[📊 OpenTelemetry Collector]
+        V[📈 Prometheus Metrics]
+        W[📊 Grafana Dashboards]
+        X[🔍 Jaeger Tracing]
+    end
+    
+    subgraph "Infrastructure"
+        Y[🐳 Docker Containers]
+        Z[⚡ Redis Cache]
+        AA[💾 File Storage]
+        BB[⚙️ Configuration Management]
+    end
+    
+    A --> E
+    B --> E
+    C --> E
+    D --> E
+    
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    
+    I --> J
+    I --> K
+    I --> L
+    
+    J --> M
+    J --> N
+    J --> O
+    J --> P
+    
+    I --> Q
+    I --> R
+    I --> S
+    I --> T
+    
+    E --> U
+    I --> U
+    M --> U
+    N --> U
+    
+    U --> V
+    U --> W
+    U --> X
+    
+    I --> Y
+    K --> Z
+    M --> AA
+    E --> BB
+    
+    classDef clientLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef apiLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef coreLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef mlLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef externalLayer fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef observabilityLayer fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    classDef infrastructureLayer fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    
+    class A,B,C,D clientLayer
+    class E,F,G,H apiLayer
+    class I,J,K,L coreLayer
+    class M,N,O,P mlLayer
+    class Q,R,S,T externalLayer
+    class U,V,W,X observabilityLayer
+    class Y,Z,AA,BB infrastructureLayer

@@ -1,0 +1,73 @@
+graph TB
+    subgraph "API Gateway Layer"
+        A[🌐 FastAPI Server :8080]
+        B[❤️ Health Endpoints]
+        C[📊 Metrics Endpoints]
+        D[💾 Session Management]
+    end
+    
+    subgraph "Core Services"
+        E[🔄 FSM Agent Service]
+        F[🧠 Intent Analysis Service]
+        G[🔍 Classification Service]
+        H[💊 Prescription Service]
+    end
+    
+    subgraph "External Services"
+        I[🛡️ Insurance MCP Service]
+        J[🏪 Vendor Service]
+        K[🗃️ ChromaDB Service]
+        L[🤖 Ollama LLM Service]
+    end
+    
+    subgraph "Data Layer"
+        M[💾 Session Store]
+        N[🧠 Model Storage]
+        O[🔍 Vector Database]
+        P[⚙️ Configuration Store]
+    end
+    
+    subgraph "Observability Services"
+        Q[📊 OpenTelemetry Collector]
+        R[📈 Prometheus Server]
+        S[📊 Grafana Dashboard]
+        T[🔍 Jaeger Tracing]
+    end
+    
+    A --> E
+    A --> F
+    A --> G
+    A --> H
+    
+    E --> I
+    E --> J
+    F --> L
+    G --> L
+    H --> K
+    
+    E --> M
+    G --> N
+    H --> O
+    A --> P
+    
+    A --> Q
+    E --> Q
+    F --> Q
+    G --> Q
+    H --> Q
+    
+    Q --> R
+    Q --> T
+    R --> S
+    
+    classDef apiLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef coreLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef externalLayer fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef dataLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef observabilityLayer fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    
+    class A,B,C,D apiLayer
+    class E,F,G,H coreLayer
+    class I,J,K,L externalLayer
+    class M,N,O,P dataLayer
+    class Q,R,S,T observabilityLayer

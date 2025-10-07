@@ -1,0 +1,98 @@
+stateDiagram-v2
+    [*] --> INITIAL: New Session
+    
+    %% Main Flow
+    INITIAL --> CLASSIFYING: Image + Context
+    INITIAL --> FOLLOWUP: Missing Info
+    INITIAL --> ERROR: Invalid Input
+    
+    CLASSIFYING --> PRESCRIBING: Disease Found
+    CLASSIFYING --> FOLLOWUP: Need More Info
+    CLASSIFYING --> ERROR: Classification Failed
+    
+    PRESCRIBING --> INSURANCE: Treatment Ready
+    PRESCRIBING --> VENDOR_QUERY: User Wants Vendors
+    PRESCRIBING --> COMPLETED: No Further Action
+    
+    %% Insurance Flow
+    INSURANCE --> VENDOR_QUERY: Premium Calculated
+    INSURANCE --> COMPLETED: Insurance Only
+    
+    %% Vendor Flow
+    VENDOR_QUERY --> SHOW_VENDORS: User Confirms
+    VENDOR_QUERY --> COMPLETED: No Vendors Needed
+    
+    SHOW_VENDORS --> ORDER_BOOKING: Vendor Selected
+    SHOW_VENDORS --> COMPLETED: No Selection
+    
+    ORDER_BOOKING --> FOLLOWUP: Order Placed
+    ORDER_BOOKING --> COMPLETED: Order Complete
+    
+    %% Followup Flow
+    FOLLOWUP --> INITIAL: New Request
+    FOLLOWUP --> CLASSIFYING: Reclassify
+    FOLLOWUP --> PRESCRIBING: Regenerate
+    FOLLOWUP --> COMPLETED: Session End
+    
+    %% Terminal States
+    ERROR --> [*]: Session Terminated
+    COMPLETED --> [*]: Session Complete
+    
+    %% State Descriptions
+    state INITIAL {
+        [*] --> ExtractContext
+        ExtractContext --> ValidateInput
+        ValidateInput --> RouteDecision
+    }
+    
+    state CLASSIFYING {
+        [*] --> LoadCNN
+        LoadCNN --> ProcessImage
+        ProcessImage --> GeneratePrediction
+        GeneratePrediction --> ValidateResult
+    }
+    
+    state PRESCRIBING {
+        [*] --> QueryRAG
+        QueryRAG --> GenerateTreatment
+        GenerateTreatment --> FormatResponse
+    }
+    
+    state INSURANCE {
+        [*] --> CalculatePremium
+        CalculatePremium --> CompareCompanies
+        CompareCompanies --> GenerateRecommendation
+    }
+    
+    state VENDOR_QUERY {
+        [*] --> CheckUserIntent
+        CheckUserIntent --> PresentOptions
+    }
+    
+    state SHOW_VENDORS {
+        [*] --> SearchVendors
+        SearchVendors --> DisplayResults
+        DisplayResults --> WaitSelection
+    }
+    
+    state ORDER_BOOKING {
+        [*] --> ProcessOrder
+        ProcessOrder --> ConfirmDetails
+        ConfirmDetails --> CompleteOrder
+    }
+    
+    state FOLLOWUP {
+        [*] --> AnalyzeIntent
+        AnalyzeIntent --> RouteToService
+    }
+    
+    state COMPLETED {
+        [*] --> GenerateSummary
+        GenerateSummary --> CleanupSession
+    }
+    
+    state ERROR {
+        [*] --> LogError
+        LogError --> ProvideFallback
+        ProvideFallback --> ResetState
+    }

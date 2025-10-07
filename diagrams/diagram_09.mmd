@@ -1,0 +1,53 @@
+graph TB
+    subgraph "System Performance"
+        A[📊 Response Time < 2s]
+        B[⚡ Throughput > 100 req/s]
+        C[👥 Concurrent Users > 1000]
+        D[📈 Uptime > 99.9%]
+    end
+    
+    subgraph "ML Performance"
+        E[🎯 Classification Accuracy > 85%]
+        F[📊 Model Confidence > 0.8]
+        G[⚡ Inference Time < 1s]
+        H[🔄 Model Update Frequency]
+    end
+    
+    subgraph "Business Metrics"
+        I[✅ Session Completion > 90%]
+        J[😊 User Satisfaction > 80%]
+        K[💊 Prescription Success Rate]
+        L[🏪 Vendor Conversion Rate]
+    end
+    
+    subgraph "Infrastructure Metrics"
+        M[💾 Memory Usage < 4GB]
+        N[🖥️ CPU Utilization < 80%]
+        O[💿 Disk Usage < 20GB]
+        P[🌐 Network Latency < 100ms]
+    end
+    
+    A --> E
+    B --> F
+    C --> G
+    D --> H
+    
+    E --> I
+    F --> J
+    G --> K
+    H --> L
+    
+    I --> M
+    J --> N
+    K --> O
+    L --> P
+    
+    classDef systemPerf fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
+    classDef mlPerf fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef businessMetrics fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef infraMetrics fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    
+    class A,B,C,D systemPerf
+    class E,F,G,H mlPerf
+    class I,J,K,L businessMetrics
+    class M,N,O,P infraMetrics

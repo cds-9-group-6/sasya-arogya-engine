@@ -1,0 +1,52 @@
+stateDiagram-v2
+    [*] --> INITIAL: New Session
+    
+    %% Primary Workflow
+    INITIAL --> CLASSIFYING: Image + Context Available
+    INITIAL --> FOLLOWUP: Missing Information
+    INITIAL --> ERROR: Invalid Input
+    
+    CLASSIFYING --> PRESCRIBING: Disease Identified
+    CLASSIFYING --> FOLLOWUP: Need More Information
+    CLASSIFYING --> ERROR: Classification Failed
+    
+    PRESCRIBING --> INSURANCE: Treatment Generated
+    PRESCRIBING --> VENDOR_QUERY: User Wants Vendors
+    PRESCRIBING --> COMPLETED: No Further Action
+    
+    %% Insurance Service
+    INSURANCE --> VENDOR_QUERY: Insurance Calculated
+    INSURANCE --> COMPLETED: Insurance Only
+    
+    %% Vendor Service
+    VENDOR_QUERY --> SHOW_VENDORS: User Confirms
+    VENDOR_QUERY --> COMPLETED: No Vendors Needed
+    
+    SHOW_VENDORS --> ORDER_BOOKING: Vendor Selected
+    SHOW_VENDORS --> COMPLETED: No Selection
+    
+    ORDER_BOOKING --> FOLLOWUP: Order Placed
+    ORDER_BOOKING --> COMPLETED: Order Complete
+    
+    %% Followup Handling
+    FOLLOWUP --> INITIAL: New Request
+    FOLLOWUP --> CLASSIFYING: Reclassify
+    FOLLOWUP --> PRESCRIBING: Regenerate
+    FOLLOWUP --> COMPLETED: Session End
+    
+    %% Terminal States
+    ERROR --> [*]: Session Terminated
+    COMPLETED --> [*]: Session Complete
+    
+    %% State Styling
+    classDef startEnd fill:#e1f5fe,stroke:#01579b,stroke-width:3px
+    classDef process fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef service fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef terminal fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef error fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    
+    class INITIAL,FOLLOWUP startEnd
+    class CLASSIFYING,PRESCRIBING process
+    class INSURANCE,VENDOR_QUERY,SHOW_VENDORS,ORDER_BOOKING service
+    class COMPLETED terminal
+    class ERROR error

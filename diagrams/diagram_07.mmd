@@ -1,0 +1,80 @@
+graph TB
+    subgraph "Load Balancer Layer"
+        A[⚖️ NGINX/HAProxy]
+        B[🔒 SSL Termination]
+        C[⚡ Rate Limiting]
+        D[❤️ Health Checks]
+    end
+    
+    subgraph "Application Layer"
+        E[🔄 Engine Instance 1]
+        F[🔄 Engine Instance 2]
+        G[🔄 Engine Instance N]
+    end
+    
+    subgraph "Data Layer"
+        H[⚡ Redis Cluster]
+        I[🗄️ PostgreSQL Cluster]
+        J[💾 MinIO/S3 Storage]
+    end
+    
+    subgraph "External Services"
+        K[🤖 Ollama LLM Cluster]
+        L[📈 MLflow Server]
+        M[📊 Monitoring Stack]
+    end
+    
+    subgraph "Infrastructure"
+        N[☸️ Kubernetes/Docker Swarm]
+        O[🕸️ Service Mesh]
+        P[🔐 Secrets Management]
+        Q[💾 Backup & Recovery]
+    end
+    
+    A --> E
+    A --> F
+    A --> G
+    
+    E --> H
+    F --> H
+    G --> H
+    
+    E --> I
+    F --> I
+    G --> I
+    
+    E --> J
+    F --> J
+    G --> J
+    
+    E --> K
+    F --> K
+    G --> K
+    
+    E --> L
+    F --> L
+    G --> L
+    
+    E --> M
+    F --> M
+    G --> M
+    
+    E --> N
+    F --> N
+    G --> N
+    
+    N --> O
+    O --> P
+    P --> Q
+    
+    classDef lbLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef appLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef dataLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef externalLayer fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef infraLayer fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    
+    class A,B,C,D lbLayer
+    class E,F,G appLayer
+    class H,I,J dataLayer
+    class K,L,M externalLayer
+    class N,O,P,Q infraLayer

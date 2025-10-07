@@ -1,0 +1,62 @@
+sequenceDiagram
+    participant U as 👤 User
+    participant I as 🌐 Initial Node
+    participant F as 🔄 Followup Node
+    participant IN as 🏦 Insurance Node
+    participant LLM as 🤖 LLM Service
+    participant IT as 🔧 Insurance Tool
+    participant MCP as 🏢 MCP Server
+    participant CG as 📄 Certificate Generator
+    participant IC as 🏢 Insurance Companies
+    participant DB as 🗄️ Policy Database
+    
+    Note over U,DB: Insurance Purchase & Certificate Generation Flow
+    
+    U->>I: "Help me apply for crop insurance with these premium details"
+    I->>I: Check existing conversation
+    I->>F: Route to followup (continuing conversation)
+    
+    F->>LLM: Analyze insurance intent
+    Note over LLM: "apply for crop insurance" → insurance action
+    LLM->>F: {"action": "insurance", "confidence": 0.98}
+    
+    F->>LLM: Analyze insurance sub-intent
+    Note over LLM: "apply for insurance" → wants_insurance_purchase: true
+    LLM->>F: {"wants_insurance_purchase": true, ...}
+    
+    F->>IN: Route with user_intent set
+    IN->>IN: _determine_insurance_action()
+    Note over IN: Explicit purchase intent → generate_certificate
+    
+    IN->>IN: _extract_insurance_context()
+    Note over IN: Extract: farmer="John", crop="wheat", area=2.5, state="Punjab"
+    
+    IN->>IT: generate_certificate(farmer="John", crop="wheat", area=2.5, state="Punjab")
+    IT->>IT: Generate policy details
+    Note over IT: Policy ID: POL-ABC123, Farmer ID: FID-XYZ789
+    
+    IT->>MCP: POST /tools/call
+    Note over MCP: {"name": "generate_insurance_certificate", "arguments": {...}}
+    
+    MCP->>CG: Execute certificate generation
+    CG->>IC: Get company details for Punjab
+    IC->>CG: "Punjab Agricultural Insurance Corporation"
+    
+    CG->>CG: Calculate insurance values
+    Note over CG: Sum Insured: ₹112,500, Premium: ₹9,375 (Farmer) + ₹28,125 (Govt)
+    
+    CG->>CG: Generate PDF certificate
+    Note over CG: Include: Policy details, Terms & conditions, Premium breakdown
+    
+    CG->>DB: Store policy in database
+    DB->>CG: Policy stored successfully
+    
+    CG->>MCP: Return certificate data + PDF
+    MCP->>IT: Policy data + PDF certificate
+    
+    IT->>IN: Certificate generation result
+    IN->>IN: Store certificate in state
+    IN->>U: Stream certificate generation results
+    Note over U: "🏦 Insurance Policy Certificate Generated Successfully! 🎉<br/>Policy ID: POL-ABC123<br/>📄 Your insurance certificate PDF has been generated"
+    
+    IN->>IN: Set next_action = "completed"

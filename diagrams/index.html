@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sasya Arogya Engine - Technical Documentation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            padding: 60px;
+            text-align: center;
+            max-width: 800px;
+            margin: 20px;
+        }
+        
+        .logo {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+        }
+        
+        .diagram-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+        
+        .diagram-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        
+        .diagram-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.1);
+            border-color: #007bff;
+        }
+        
+        .diagram-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+        
+        .diagram-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .diagram-description {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .features {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 40px;
+            text-align: left;
+        }
+        
+        .features h3 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        
+        .feature-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+        }
+        
+        .feature-icon {
+            font-size: 1.5em;
+            margin-right: 15px;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 30px;
+                margin: 10px;
+            }
+            
+            .diagram-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🏗️</div>
+        <h1>Sasya Arogya Engine</h1>
+        <p class="subtitle">Technical Architecture Documentation</p>
+        
+        <div class="diagram-grid">
+            <div class="diagram-card" onclick="openDiagram('architecture')">
+                <div class="diagram-icon">🏛️</div>
+                <div class="diagram-title">Application Architecture</div>
+                <div class="diagram-description">
+                    Complete system architecture showing all layers, components, and data flow connections. Interactive visualization with detailed component information.
+                </div>
+                <a href="architecture_visualization.html" class="btn">View Architecture</a>
+            </div>
+            
+            <div class="diagram-card" onclick="openDiagram('workflow')">
+                <div class="diagram-icon">🔄</div>
+                <div class="diagram-title">Workflow State Machine</div>
+                <div class="diagram-description">
+                    LangGraph finite state machine showing the complete workflow from user input to service completion. Interactive state transitions and flow paths.
+                </div>
+                <a href="workflow_visualization.html" class="btn">View Workflow</a>
+            </div>
+        </div>
+        
+        <div class="features">
+            <h3>📊 Visualization Features</h3>
+            <div class="feature-list">
+                <div class="feature-item">
+                    <div class="feature-icon">📥</div>
+                    <div>
+                        <strong>Download Options</strong><br>
+                        Export as SVG or PNG
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🔍</div>
+                    <div>
+                        <strong>Interactive Elements</strong><br>
+                        Hover for detailed information
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🎨</div>
+                    <div>
+                        <strong>Professional Design</strong><br>
+                        Clean, modern visualization
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">📱</div>
+                    <div>
+                        <strong>Responsive Layout</strong><br>
+                        Works on all devices
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🔗</div>
+                    <div>
+                        <strong>Clear Connections</strong><br>
+                        Straight arrows and flow paths
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">⚙️</div>
+                    <div>
+                        <strong>Customizable Views</strong><br>
+                        Multiple layout options
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Sasya Arogya Engine</strong> - Agricultural Intelligence Platform</p>
+            <p>Professional technical documentation with interactive visualizations</p>
+        </div>
+    </div>
+
+    <script>
+        function openDiagram(type) {
+            if (type === 'architecture') {
+                window.open('architecture_visualization.html', '_blank');
+            } else if (type === 'workflow') {
+                window.open('workflow_visualization.html', '_blank');
+            }
+        }
+        
+        // Add some interactive effects
+        document.querySelectorAll('.diagram-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px) scale(1.02)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+    </script>
+</body>
+</html>

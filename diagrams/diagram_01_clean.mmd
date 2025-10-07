@@ -1,0 +1,114 @@
+graph TD
+    %% Client Layer
+    subgraph CLIENT["📱 CLIENT APPLICATIONS"]
+        A1[Android Mobile App]
+        A2[Web Dashboard]
+        A3[API Clients]
+        A4[Third-party Integrations]
+    end
+    
+    %% API Gateway Layer
+    subgraph GATEWAY["🌐 API GATEWAY LAYER"]
+        B1[FastAPI Server :8080]
+        B2[CORS & Security]
+        B3[Rate Limiting]
+        B4[Authentication]
+    end
+    
+    %% Core Engine Layer
+    subgraph CORE["🔄 CORE ENGINE"]
+        C1[LangGraph FSM Workflow]
+        C2[Intent Analysis Engine]
+        C3[Session Management]
+        C4[State Persistence]
+    end
+    
+    %% AI/ML Services Layer
+    subgraph ML["🧠 AI/ML SERVICES"]
+        D1[CNN Disease Classifier]
+        D2[LLaVA Vision Model]
+        D3[Ollama LLM Server]
+        D4[RAG Prescription System]
+    end
+    
+    %% External Services Layer
+    subgraph EXTERNAL["🔌 EXTERNAL SERVICES"]
+        E1[Insurance MCP Server]
+        E2[Vendor Database]
+        E3[ChromaDB Vector Store]
+        E4[MLflow Tracking]
+    end
+    
+    %% Observability Layer
+    subgraph OBSERVABILITY["📊 OBSERVABILITY STACK"]
+        F1[OpenTelemetry Collector]
+        F2[Prometheus Metrics]
+        F3[Grafana Dashboards]
+        F4[Jaeger Tracing]
+    end
+    
+    %% Infrastructure Layer
+    subgraph INFRASTRUCTURE["🐳 INFRASTRUCTURE"]
+        G1[Docker Containers]
+        G2[Redis Cache]
+        G3[File Storage]
+        G4[Configuration Management]
+    end
+    
+    %% Main Vertical Flow
+    A1 --> B1
+    A2 --> B1
+    A3 --> B1
+    A4 --> B1
+    
+    B1 --> B2
+    B2 --> B3
+    B3 --> B4
+    B4 --> C1
+    
+    C1 --> C2
+    C1 --> C3
+    C1 --> C4
+    
+    C2 --> D1
+    C2 --> D2
+    C2 --> D3
+    C2 --> D4
+    
+    C1 --> E1
+    C1 --> E2
+    C1 --> E3
+    C1 --> E4
+    
+    %% Observability Flow
+    B1 -.-> F1
+    C1 -.-> F1
+    D1 -.-> F1
+    D2 -.-> F1
+    
+    F1 --> F2
+    F1 --> F3
+    F1 --> F4
+    
+    %% Infrastructure Support
+    C1 -.-> G1
+    C3 -.-> G2
+    D1 -.-> G3
+    B1 -.-> G4
+    
+    %% Styling
+    classDef clientLayer fill:#e1f5fe,stroke:#01579b,stroke-width:4px
+    classDef apiLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:4px
+    classDef coreLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:4px
+    classDef mlLayer fill:#fff3e0,stroke:#e65100,stroke-width:4px
+    classDef externalLayer fill:#fce4ec,stroke:#880e4f,stroke-width:4px
+    classDef observabilityLayer fill:#f1f8e9,stroke:#33691e,stroke-width:4px
+    classDef infrastructureLayer fill:#fff8e1,stroke:#f57f17,stroke-width:4px
+    
+    class A1,A2,A3,A4 clientLayer
+    class B1,B2,B3,B4 apiLayer
+    class C1,C2,C3,C4 coreLayer
+    class D1,D2,D3,D4 mlLayer
+    class E1,E2,E3,E4 externalLayer
+    class F1,F2,F3,F4 observabilityLayer
+    class G1,G2,G3,G4 infrastructureLayer
