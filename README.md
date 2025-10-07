@@ -94,6 +94,9 @@
 
 The Sasya Arogya Engine is built using a modular, event-driven architecture that supports multiple agricultural services through an intelligent workflow system.
 
+> 📖 **For comprehensive technical architecture documentation, see [TECHNICAL_ARCHITECTURE.md](./TECHNICAL_ARCHITECTURE.md)**  
+> 📊 **For visual architecture diagrams, see [ARCHITECTURE_DIAGRAMS.md](./ARCHITECTURE_DIAGRAMS.md)**
+
 ### 1. LangGraph FSM Workflow
 
 ```
@@ -1302,7 +1305,9 @@ tests/fixtures/
 
 ## 📚 Documentation
 
-- **[Architecture Overview](#-system-architecture)** - Detailed system architecture and component interactions
+- **[Technical Architecture](./TECHNICAL_ARCHITECTURE.md)** - Comprehensive technical architecture and system design
+- **[Architecture Diagrams](./ARCHITECTURE_DIAGRAMS.md)** - Visual diagrams for presentations and reports
+- **[Architecture Overview](#-system-architecture)** - High-level system architecture overview
 - **[Deployment Guide](./DEPLOYMENT.md)** - Complete deployment instructions for all environments  
 - **[API Documentation](http://localhost:8080/docs)** - Interactive API documentation (when server is running)
 - **[Contributing Guidelines](./CONTRIBUTING.md)** - Development and contribution instructions
