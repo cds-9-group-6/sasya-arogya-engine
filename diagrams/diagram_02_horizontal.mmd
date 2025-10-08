@@ -1,0 +1,57 @@
+flowchart LR
+    %% Start and End
+    START([🚀 Start]) --> INITIAL{Initial Node}
+    COMPLETED([✅ Complete]) --> END([🏁 End])
+    ERROR([❌ Error]) --> END
+    
+    %% Main Classification Flow
+    INITIAL -->|Image + Context| CLASSIFYING[🔍 Classifying]
+    INITIAL -->|Missing Info| FOLLOWUP[❓ Followup]
+    INITIAL -->|Invalid Input| ERROR
+    
+    %% Classification Results
+    CLASSIFYING -->|Disease Found| PRESCRIBING[💊 Prescribing]
+    CLASSIFYING -->|Need More Info| FOLLOWUP
+    CLASSIFYING -->|Failed| ERROR
+    
+    %% Prescription Results
+    PRESCRIBING -->|Treatment Ready| INSURANCE[🛡️ Insurance]
+    PRESCRIBING -->|User Wants Vendors| VENDOR_QUERY[🏪 Vendor Query]
+    PRESCRIBING -->|No Further Action| COMPLETED
+    
+    %% Insurance Flow
+    INSURANCE -->|Premium Calculated| VENDOR_QUERY
+    INSURANCE -->|Insurance Only| COMPLETED
+    
+    %% Vendor Flow
+    VENDOR_QUERY -->|User Confirms| SHOW_VENDORS[🛒 Show Vendors]
+    VENDOR_QUERY -->|No Vendors Needed| COMPLETED
+    
+    %% Vendor Selection
+    SHOW_VENDORS -->|Vendor Selected| ORDER_BOOKING[📝 Order Booking]
+    SHOW_VENDORS -->|No Selection| COMPLETED
+    
+    %% Order Processing
+    ORDER_BOOKING -->|Order Placed| FOLLOWUP
+    ORDER_BOOKING -->|Order Complete| COMPLETED
+    
+    %% Followup Handling
+    FOLLOWUP -->|New Request| INITIAL
+    FOLLOWUP -->|Reclassify| CLASSIFYING
+    FOLLOWUP -->|Regenerate| PRESCRIBING
+    FOLLOWUP -->|Session End| COMPLETED
+    
+    %% Styling
+    classDef startEnd fill:#e1f5fe,stroke:#01579b,stroke-width:3px
+    classDef process fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef service fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef terminal fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef error fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    classDef decision fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    
+    class START,END startEnd
+    class INITIAL decision
+    class CLASSIFYING,PRESCRIBING process
+    class INSURANCE,VENDOR_QUERY,SHOW_VENDORS,ORDER_BOOKING service
+    class FOLLOWUP,COMPLETED terminal
+    class ERROR error

@@ -1,0 +1,90 @@
+graph TB
+    subgraph "LangGraph FSM Workflow"
+        A[🎯 START State]
+        B[🔄 INITIAL Node]
+        C[🔄 FOLLOWUP Node]
+        D[🏦 INSURANCE Node]
+        E[✅ COMPLETED State]
+        F[❌ ERROR State]
+    end
+    
+    subgraph "Intent Analysis System"
+        G[🧠 LLM Intent Analyzer]
+        H[📝 ChatPromptTemplate]
+        I[🎯 Action Router]
+    end
+    
+    subgraph "MCP Integration Layer"
+        J[🔧 Insurance Tool]
+        K[🌐 HTTP Client]
+        L[🔄 Retry Logic]
+        M[⚡ Circuit Breaker]
+    end
+    
+    subgraph "MCP Server Tools"
+        N[💰 calculate_crop_premium]
+        O[📄 generate_insurance_certificate]
+        P[🏢 get_insurance_companies]
+        Q[🎯 recommend_insurance]
+    end
+    
+    subgraph "External Data Sources"
+        R[🏛️ Government APIs]
+        S[🏢 Insurance APIs]
+        T[📊 Weather APIs]
+        U[🗄️ Database Services]
+    end
+    
+    %% LangGraph Flow
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    D --> F
+    
+    %% Intent Analysis
+    C --> G
+    G --> H
+    H --> I
+    I --> D
+    
+    %% MCP Integration
+    D --> J
+    J --> K
+    K --> L
+    L --> M
+    
+    %% MCP Tools
+    M --> N
+    M --> O
+    M --> P
+    M --> Q
+    
+    %% External Data
+    N --> R
+    N --> S
+    O --> S
+    P --> S
+    Q --> T
+    Q --> U
+    
+    %% Response Flow
+    N --> J
+    O --> J
+    P --> J
+    Q --> J
+    
+    J --> D
+    
+    %% Styling
+    classDef langgraphState fill:#e3f2fd,stroke:#01579b,stroke-width:2px
+    classDef intentSystem fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef mcpIntegration fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef mcpTools fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef externalData fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    
+    class A,B,C,D,E,F langgraphState
+    class G,H,I intentSystem
+    class J,K,L,M mcpIntegration
+    class N,O,P,Q mcpTools
+    class R,S,T,U externalData

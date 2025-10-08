@@ -1,0 +1,45 @@
+stateDiagram-v2
+    [*] --> INITIAL: 🚀 New Session
+    
+    INITIAL --> CLASSIFYING: 📸 Image + Context Available
+    INITIAL --> FOLLOWUP: ❓ Missing Information
+    INITIAL --> ERROR: ❌ Invalid Input
+    
+    CLASSIFYING --> PRESCRIBING: ✅ Disease Identified
+    CLASSIFYING --> FOLLOWUP: 🔍 Need More Info
+    CLASSIFYING --> ERROR: 💥 Classification Failed
+    
+    PRESCRIBING --> INSURANCE: 💊 Treatment Generated
+    PRESCRIBING --> VENDOR_QUERY: 🏪 User Wants Vendors
+    PRESCRIBING --> COMPLETED: ✅ No Further Action
+    
+    INSURANCE --> VENDOR_QUERY: 🛡️ Insurance Calculated
+    INSURANCE --> COMPLETED: 🛡️ Insurance Only
+    
+    VENDOR_QUERY --> SHOW_VENDORS: 👍 User Confirms
+    VENDOR_QUERY --> COMPLETED: ❌ No Vendors Needed
+    
+    SHOW_VENDORS --> ORDER_BOOKING: 🛒 Vendor Selected
+    SHOW_VENDORS --> COMPLETED: ❌ No Selection
+    
+    ORDER_BOOKING --> FOLLOWUP: 📝 Order Placed
+    ORDER_BOOKING --> COMPLETED: ✅ Order Complete
+    
+    FOLLOWUP --> INITIAL: 🔄 New Request
+    FOLLOWUP --> CLASSIFYING: 🔍 Reclassify
+    FOLLOWUP --> PRESCRIBING: 💊 Regenerate
+    FOLLOWUP --> COMPLETED: 🏁 Session End
+    
+    ERROR --> [*]: 💀 Session Terminated
+    COMPLETED --> [*]: ✅ Session Complete
+    
+    note right of INITIAL: Entry point with context extraction
+    note right of CLASSIFYING: CNN disease classification
+    note right of PRESCRIBING: RAG-based recommendations
+    note right of INSURANCE: Premium calculation & comparison
+    note right of VENDOR_QUERY: Ask user about vendor preferences
+    note right of SHOW_VENDORS: Display local vendors & pricing
+    note right of ORDER_BOOKING: Process order with selected vendor
+    note right of FOLLOWUP: Handle additional questions & navigation
+    note right of COMPLETED: Terminal state with contextual follow-ups
+    note right of ERROR: Error handling and recovery

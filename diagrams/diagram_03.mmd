@@ -1,0 +1,84 @@
+graph TB
+    subgraph "Input Processing Layer"
+        A[📸 Image Upload]
+        B[💬 Text Query]
+        C[🔍 Context Extraction]
+    end
+    
+    subgraph "Computer Vision Pipeline"
+        D[🖼️ Image Preprocessing]
+        E[🧠 CNN Disease Classifier]
+        F[👁️ Attention Visualization]
+        G[📊 Confidence Scoring]
+    end
+    
+    subgraph "Natural Language Processing"
+        H[🎯 Intent Analysis]
+        I[🔍 Context Extraction]
+        J[🏷️ Entity Recognition]
+        K[😊 Sentiment Analysis]
+    end
+    
+    subgraph "Large Language Models"
+        L[🤖 Ollama LLM Server]
+        M[💭 Response Generation]
+        N[🤔 Decision Making]
+        O[💬 Conversation Management]
+    end
+    
+    subgraph "Knowledge Retrieval"
+        P[📚 RAG System]
+        Q[🔍 Vector Search]
+        R[💊 Treatment Database]
+        S[📋 Prescription Generation]
+    end
+    
+    subgraph "Model Management"
+        T[📈 MLflow Tracking]
+        U[🏷️ Model Versioning]
+        V[📊 Performance Monitoring]
+        W[🧪 Experiment Tracking]
+    end
+    
+    A --> D
+    B --> H
+    C --> I
+    
+    D --> E
+    E --> F
+    F --> G
+    
+    H --> L
+    I --> L
+    J --> L
+    K --> L
+    
+    L --> M
+    L --> N
+    L --> O
+    
+    M --> P
+    P --> Q
+    Q --> R
+    R --> S
+    
+    E --> T
+    L --> T
+    P --> T
+    T --> U
+    T --> V
+    T --> W
+    
+    classDef inputLayer fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
+    classDef visionLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef nlpLayer fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef llmLayer fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef knowledgeLayer fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef managementLayer fill:#f1f8e9,stroke:#689f38,stroke-width:2px
+    
+    class A,B,C inputLayer
+    class D,E,F,G visionLayer
+    class H,I,J,K nlpLayer
+    class L,M,N,O llmLayer
+    class P,Q,R,S knowledgeLayer
+    class T,U,V,W managementLayer

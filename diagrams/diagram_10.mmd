@@ -1,0 +1,91 @@
+graph TB
+    subgraph "Frontend Technologies"
+        A[📱 Android (Kotlin/Java)]
+        B[💻 Web (React/Vue.js)]
+        C[🔌 REST API Clients]
+    end
+    
+    subgraph "Backend Technologies"
+        D[🐍 Python 3.11+]
+        E[⚡ FastAPI Framework]
+        F[🔄 LangGraph Workflow]
+        G[🧠 LangChain Tools]
+    end
+    
+    subgraph "AI/ML Technologies"
+        H[🧠 TensorFlow 2.15+]
+        I[🤖 Ollama LLM Server]
+        J[🔍 ChromaDB Vector DB]
+        K[📈 MLflow Tracking]
+    end
+    
+    subgraph "Data Technologies"
+        L[⚡ Redis Cache]
+        M[🗄️ PostgreSQL Database]
+        N[💾 MinIO/S3 Storage]
+        O[📊 Time Series DB]
+    end
+    
+    subgraph "Observability Technologies"
+        P[📊 OpenTelemetry]
+        Q[📈 Prometheus]
+        R[📊 Grafana]
+        S[🔍 Jaeger Tracing]
+    end
+    
+    subgraph "Infrastructure Technologies"
+        T[🐳 Docker Containers]
+        U[☸️ Kubernetes]
+        V[🌐 NGINX Load Balancer]
+        W[🔧 Helm Charts]
+    end
+    
+    A --> D
+    B --> D
+    C --> D
+    
+    D --> E
+    E --> F
+    F --> G
+    
+    G --> H
+    G --> I
+    G --> J
+    G --> K
+    
+    E --> L
+    E --> M
+    E --> N
+    E --> O
+    
+    D --> P
+    E --> P
+    F --> P
+    G --> P
+    
+    P --> Q
+    P --> R
+    P --> S
+    
+    D --> T
+    E --> T
+    F --> T
+    G --> T
+    
+    T --> U
+    U --> V
+    V --> W
+    
+    classDef frontendTech fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
+    classDef backendTech fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef mlTech fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef dataTech fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef observabilityTech fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    classDef infraTech fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    
+    class A,B,C frontendTech
+    class D,E,F,G backendTech
+    class H,I,J,K mlTech
+    class L,M,N,O dataTech
+    class P,Q,R,S observabilityTech
+    class T,U,V,W infraTech

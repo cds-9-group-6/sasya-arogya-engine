@@ -1,0 +1,75 @@
+graph TB
+    subgraph "Application Layer"
+        A[🌐 FastAPI Server]
+        B[🔄 FSM Workflow]
+        C[🧠 ML Models]
+        D[🔌 External Services]
+    end
+    
+    subgraph "Instrumentation Layer"
+        E[📊 OpenTelemetry SDK]
+        F[📈 Custom Metrics]
+        G[🔍 Distributed Tracing]
+        H[📝 Structured Logging]
+    end
+    
+    subgraph "Collection & Processing"
+        I[📊 OTel Collector]
+        J[📈 Prometheus Scraper]
+        K[📝 Log Aggregator]
+        L[🔍 Trace Processor]
+    end
+    
+    subgraph "Storage & Analysis"
+        M[📈 Prometheus TSDB]
+        N[🔍 Jaeger Backend]
+        O[📊 Grafana Dashboards]
+        P[🚨 Alert Manager]
+    end
+    
+    subgraph "Visualization Layer"
+        Q[📊 System Health Dashboard]
+        R[🧠 ML Performance Dashboard]
+        S[📈 Business Metrics Dashboard]
+        T[❌ Error Analysis Dashboard]
+    end
+    
+    A --> E
+    B --> E
+    C --> E
+    D --> E
+    
+    E --> F
+    E --> G
+    E --> H
+    
+    F --> I
+    G --> I
+    H --> K
+    
+    I --> J
+    J --> M
+    K --> M
+    L --> N
+    
+    M --> O
+    N --> O
+    O --> Q
+    O --> R
+    O --> S
+    O --> T
+    
+    M --> P
+    P --> Q
+    
+    classDef appLayer fill:#e3f2fd,stroke:#0277bd,stroke-width:2px
+    classDef instrumentationLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef collectionLayer fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef storageLayer fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef visualizationLayer fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    
+    class A,B,C,D appLayer
+    class E,F,G,H instrumentationLayer
+    class I,J,K,L collectionLayer
+    class M,N,O,P storageLayer
+    class Q,R,S,T visualizationLayer

@@ -1,0 +1,89 @@
+graph TB
+    subgraph "Client Layer"
+        A[📱 Android App]
+        B[💻 Web Application]
+        C[🔌 API Clients]
+    end
+    
+    subgraph "Sasya Arogya Engine"
+        D[🌐 FastAPI Server<br/>Port 8080]
+        E[🧠 LangGraph FSM<br/>Workflow Engine]
+        F[🎯 Intent Analyzer<br/>LLM-Powered]
+        G[🏦 Insurance Node<br/>Action Router]
+        H[🔧 Insurance Tool<br/>MCP Client]
+    end
+    
+    subgraph "Insurance MCP Server"
+        I[🏢 Sasya Arogya MCP Server<br/>Port 8001]
+        J[💰 Premium Calculator<br/>Tool]
+        K[📄 Certificate Generator<br/>Tool]
+        L[🏢 Company Data<br/>Tool]
+        M[🎯 Recommendation<br/>Tool]
+    end
+    
+    subgraph "External Insurance Services"
+        O[🏢 Insurance<br/>Company APIs]
+        Q[🗄️ Policy Database]
+    end
+    
+    subgraph "Insurance Data Flow"
+        R[📊 Premium Data]
+        S[📋 Policy Details]
+        T[🏢 Company Info]
+        U[📄 PDF Certificates]
+    end
+    
+    %% Client to Engine
+    A --> D
+    B --> D
+    C --> D
+    
+    %% Engine Internal Flow
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    
+    %% Engine to Insurance MCP
+    H --> I
+    
+    %% Insurance MCP Internal Tools
+    I --> J
+    I --> K
+    I --> L
+    I --> M
+    
+    %% Insurance MCP to External Services
+    J --> O
+    K --> O
+    L --> O
+    M --> Q
+    
+    %% Insurance Data Flow
+    J --> R
+    K --> S
+    L --> T
+    K --> U
+    
+    %% Response Flow
+    R --> H
+    S --> H
+    T --> H
+    U --> H
+    
+    H --> G
+    G --> E
+    E --> D
+    
+    %% Styling
+    classDef clientLayer fill:#e3f2fd,stroke:#01579b,stroke-width:2px
+    classDef engineLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef insuranceLayer fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef externalLayer fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef dataLayer fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    
+    class A,B,C clientLayer
+    class D,E,F,G,H engineLayer
+    class I,J,K,L,M insuranceLayer
+    class O,Q externalLayer
+    class R,S,T,U dataLayer

@@ -1,0 +1,19 @@
+# Requirements for Sasya Arogya Engine Periodic Testing
+# Install with: pip install -r test_requirements.txt
+
+# HTTP client for async requests
+aiohttp>=3.8.0
+
+# Additional dependencies that might be needed
+asyncio-mqtt>=0.11.0  # For potential MQTT integration
+aiofiles>=23.0.0      # For async file operations
+pydantic>=2.0.0       # For data validation
+python-dotenv>=1.0.0  # For environment variable management
+
+# Optional: For enhanced logging and monitoring
+structlog>=23.0.0     # Structured logging
+prometheus-client>=0.17.0  # For metrics collection
+
+# Optional: For test result analysis
+pandas>=2.0.0         # For data analysis
+matplotlib>=3.7.0     # For result visualization

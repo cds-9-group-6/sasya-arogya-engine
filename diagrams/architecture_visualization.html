@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sasya Arogya Engine - Technical Architecture</title>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dagre-d3@0.8.4/dist/dagre-d3.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .diagram-container {
+            padding: 30px;
+            min-height: 800px;
+            position: relative;
+        }
+        
+        .layer {
+            margin-bottom: 40px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .layer-header {
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 16px;
+            color: white;
+            text-align: center;
+        }
+        
+        .layer-content {
+            padding: 20px;
+            background: white;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+        }
+        
+        .component {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px 20px;
+            text-align: center;
+            min-width: 150px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .component:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            border-color: #007bff;
+        }
+        
+        .component-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .component-desc {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .flow-arrow {
+            position: absolute;
+            width: 2px;
+            background: #007bff;
+            z-index: 1;
+        }
+        
+        .flow-arrow::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: -4px;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 8px solid #007bff;
+        }
+        
+        .flow-arrow.horizontal {
+            height: 2px;
+            width: 100px;
+        }
+        
+        .flow-arrow.horizontal::after {
+            right: -8px;
+            top: -4px;
+            bottom: auto;
+            left: auto;
+            border-left: 8px solid #007bff;
+            border-right: none;
+            border-top: 5px solid transparent;
+            border-bottom: 5px solid transparent;
+        }
+        
+        .legend {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        
+        .connection-line {
+            stroke: #007bff;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+        
+        .connection-line.observability {
+            stroke: #28a745;
+            stroke-dasharray: 5,5;
+        }
+        
+        .connection-line.infrastructure {
+            stroke: #ffc107;
+            stroke-dasharray: 3,3;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 200px;
+        }
+        
+        .download-section {
+            padding: 20px;
+            background: #f8f9fa;
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+            }
+            
+            .layer-content {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .legend {
+                position: static;
+                margin-top: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏗️ Sasya Arogya Engine</h1>
+            <p>Technical Architecture Visualization</p>
+        </div>
+        
+        <div class="controls">
+            <div>
+                <button class="btn" onclick="downloadSVG()">📥 Download SVG</button>
+                <button class="btn btn-secondary" onclick="downloadPNG()">📥 Download PNG</button>
+                <button class="btn btn-secondary" onclick="toggleConnections()">🔗 Toggle Connections</button>
+            </div>
+            <div>
+                <span>View: </span>
+                <select id="viewSelect" onchange="changeView()">
+                    <option value="layered">Layered View</option>
+                    <option value="flow">Flow View</option>
+                    <option value="detailed">Detailed View</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="diagram-container" id="diagramContainer">
+            <svg id="architectureSVG" width="100%" height="800"></svg>
+        </div>
+        
+        <div class="legend">
+            <h4>Legend</h4>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e3f2fd;"></div>
+                <span>Client Layer</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f3e5f5;"></div>
+                <span>API Gateway</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e8f5e8;"></div>
+                <span>Core Engine</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fff3e0;"></div>
+                <span>AI/ML Services</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fce4ec;"></div>
+                <span>External Services</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f1f8e9;"></div>
+                <span>Observability</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fff8e1;"></div>
+                <span>Infrastructure</span>
+            </div>
+            <hr>
+            <div class="legend-item">
+                <div style="width: 20px; height: 2px; background: #007bff; margin-right: 10px;"></div>
+                <span>Main Data Flow</span>
+            </div>
+            <div class="legend-item">
+                <div style="width: 20px; height: 2px; background: #28a745; margin-right: 10px; border-top: 2px dashed #28a745;"></div>
+                <span>Observability</span>
+            </div>
+            <div class="legend-item">
+                <div style="width: 20px; height: 2px; background: #ffc107; margin-right: 10px; border-top: 2px dotted #ffc107;"></div>
+                <span>Infrastructure</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Architecture data
+        const architecture = {
+            layers: [
+                {
+                    name: "CLIENT LAYER",
+                    color: "#e3f2fd",
+                    components: [
+                        { id: "mobile", name: "Android Mobile App", desc: "Native mobile application" },
+                        { id: "web", name: "Web Dashboard", desc: "React-based web interface" },
+                        { id: "api", name: "API Clients", desc: "REST API consumers" },
+                        { id: "thirdparty", name: "Third-party Integrations", desc: "External system integrations" }
+                    ]
+                },
+                {
+                    name: "API GATEWAY LAYER",
+                    color: "#f3e5f5",
+                    components: [
+                        { id: "fastapi", name: "FastAPI Server :8080", desc: "High-performance async API" },
+                        { id: "security", name: "CORS & Security", desc: "Cross-origin and security policies" },
+                        { id: "rate", name: "Rate Limiting", desc: "Request throttling and limits" },
+                        { id: "auth", name: "Authentication", desc: "User authentication & authorization" }
+                    ]
+                },
+                {
+                    name: "CORE ENGINE LAYER",
+                    color: "#e8f5e8",
+                    components: [
+                        { id: "langgraph", name: "LangGraph FSM Workflow", desc: "State machine orchestration" },
+                        { id: "intent", name: "Intent Analysis Engine", desc: "NLP-based intent classification" },
+                        { id: "session", name: "Session Management", desc: "User session handling" },
+                        { id: "state", name: "State Persistence", desc: "Workflow state storage" }
+                    ]
+                },
+                {
+                    name: "AI/ML SERVICES LAYER",
+                    color: "#fff3e0",
+                    components: [
+                        { id: "cnn", name: "CNN Disease Classifier", desc: "Computer vision for plant diseases" },
+                        { id: "llava", name: "LLaVA Vision Model", desc: "Large language-vision assistant" },
+                        { id: "ollama", name: "Ollama LLM Server", desc: "Local large language model" },
+                        { id: "rag", name: "RAG Prescription System", desc: "Retrieval-augmented generation" }
+                    ]
+                },
+                {
+                    name: "EXTERNAL SERVICES LAYER",
+                    color: "#fce4ec",
+                    components: [
+                        { id: "insurance", name: "Insurance MCP Server", desc: "Crop insurance calculations" },
+                        { id: "vendor", name: "Vendor Database", desc: "Agricultural supplier data" },
+                        { id: "chromadb", name: "ChromaDB Vector Store", desc: "Vector embeddings database" },
+                        { id: "mlflow", name: "MLflow Tracking", desc: "ML experiment tracking" }
+                    ]
+                },
+                {
+                    name: "OBSERVABILITY STACK",
+                    color: "#f1f8e9",
+                    components: [
+                        { id: "otel", name: "OpenTelemetry Collector", desc: "Metrics and traces collection" },
+                        { id: "prometheus", name: "Prometheus Metrics", desc: "Time-series metrics storage" },
+                        { id: "grafana", name: "Grafana Dashboards", desc: "Visualization and monitoring" },
+                        { id: "jaeger", name: "Jaeger Tracing", desc: "Distributed tracing" }
+                    ]
+                },
+                {
+                    name: "INFRASTRUCTURE LAYER",
+                    color: "#fff8e1",
+                    components: [
+                        { id: "docker", name: "Docker Containers", desc: "Containerized deployment" },
+                        { id: "redis", name: "Redis Cache", desc: "In-memory data store" },
+                        { id: "storage", name: "File Storage", desc: "Model and data storage" },
+                        { id: "config", name: "Configuration Management", desc: "Environment configuration" }
+                    ]
+                }
+            ],
+            connections: [
+                // Main data flow
+                { from: "mobile", to: "fastapi", type: "main" },
+                { from: "web", to: "fastapi", type: "main" },
+                { from: "api", to: "fastapi", type: "main" },
+                { from: "thirdparty", to: "fastapi", type: "main" },
+                { from: "fastapi", to: "security", type: "main" },
+                { from: "security", to: "rate", type: "main" },
+                { from: "rate", to: "auth", type: "main" },
+                { from: "auth", to: "langgraph", type: "main" },
+                { from: "langgraph", to: "intent", type: "main" },
+                { from: "langgraph", to: "session", type: "main" },
+                { from: "langgraph", to: "state", type: "main" },
+                { from: "intent", to: "cnn", type: "main" },
+                { from: "intent", to: "llava", type: "main" },
+                { from: "intent", to: "ollama", type: "main" },
+                { from: "intent", to: "rag", type: "main" },
+                { from: "langgraph", to: "insurance", type: "main" },
+                { from: "langgraph", to: "vendor", type: "main" },
+                { from: "langgraph", to: "chromadb", type: "main" },
+                { from: "langgraph", to: "mlflow", type: "main" },
+                
+                // Observability connections
+                { from: "fastapi", to: "otel", type: "observability" },
+                { from: "langgraph", to: "otel", type: "observability" },
+                { from: "cnn", to: "otel", type: "observability" },
+                { from: "llava", to: "otel", type: "observability" },
+                { from: "otel", to: "prometheus", type: "observability" },
+                { from: "otel", to: "grafana", type: "observability" },
+                { from: "otel", to: "jaeger", type: "observability" },
+                
+                // Infrastructure support
+                { from: "langgraph", to: "docker", type: "infrastructure" },
+                { from: "session", to: "redis", type: "infrastructure" },
+                { from: "cnn", to: "storage", type: "infrastructure" },
+                { from: "fastapi", to: "config", type: "infrastructure" }
+            ]
+        };
+
+        let showConnections = true;
+        let currentView = 'layered';
+
+        // Initialize the diagram
+        function initDiagram() {
+            const svg = d3.select("#architectureSVG");
+            svg.selectAll("*").remove();
+            
+            // Add arrow marker
+            svg.append("defs").append("marker")
+                .attr("id", "arrowhead")
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 8)
+                .attr("refY", 0)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .append("path")
+                .attr("d", "M0,-5L10,0L0,5")
+                .attr("fill", "#007bff");
+
+            if (currentView === 'layered') {
+                drawLayeredView(svg);
+            } else if (currentView === 'flow') {
+                drawFlowView(svg);
+            } else {
+                drawDetailedView(svg);
+            }
+        }
+
+        function drawLayeredView(svg) {
+            const containerWidth = document.getElementById('diagramContainer').clientWidth;
+            const layerHeight = 100;
+            const componentWidth = 180;
+            const componentHeight = 80;
+            const margin = 20;
+
+            architecture.layers.forEach((layer, layerIndex) => {
+                const layerY = layerIndex * (layerHeight + 20) + 50;
+                
+                // Layer background
+                svg.append("rect")
+                    .attr("x", margin)
+                    .attr("y", layerY)
+                    .attr("width", containerWidth - 2 * margin)
+                    .attr("height", layerHeight)
+                    .attr("fill", layer.color)
+                    .attr("rx", 8)
+                    .attr("stroke", "#ddd")
+                    .attr("stroke-width", 1);
+
+                // Layer title
+                svg.append("text")
+                    .attr("x", containerWidth / 2)
+                    .attr("y", layerY + 25)
+                    .attr("text-anchor", "middle")
+                    .attr("font-size", "16")
+                    .attr("font-weight", "bold")
+                    .attr("fill", "#333")
+                    .text(layer.name);
+
+                // Components
+                layer.components.forEach((component, compIndex) => {
+                    const x = margin + 20 + compIndex * (componentWidth + 20);
+                    const y = layerY + 40;
+                    
+                    // Component box
+                    const compGroup = svg.append("g")
+                        .attr("class", "component-group")
+                        .attr("data-id", component.id);
+
+                    compGroup.append("rect")
+                        .attr("x", x)
+                        .attr("y", y)
+                        .attr("width", componentWidth)
+                        .attr("height", componentHeight)
+                        .attr("fill", "white")
+                        .attr("stroke", "#007bff")
+                        .attr("stroke-width", 2)
+                        .attr("rx", 6)
+                        .on("mouseover", function() {
+                            showTooltip(d3.event, component);
+                        })
+                        .on("mouseout", function() {
+                            hideTooltip();
+                        });
+
+                    compGroup.append("text")
+                        .attr("x", x + componentWidth / 2)
+                        .attr("y", y + 25)
+                        .attr("text-anchor", "middle")
+                        .attr("font-size", "12")
+                        .attr("font-weight", "bold")
+                        .attr("fill", "#333")
+                        .text(component.name);
+
+                    compGroup.append("text")
+                        .attr("x", x + componentWidth / 2)
+                        .attr("y", y + 45)
+                        .attr("text-anchor", "middle")
+                        .attr("font-size", "10")
+                        .attr("fill", "#666")
+                        .text(component.desc);
+                });
+            });
+
+            if (showConnections) {
+                drawConnections(svg);
+            }
+        }
+
+        function drawFlowView(svg) {
+            // Simplified flow view
+            const containerWidth = document.getElementById('diagramContainer').clientWidth;
+            const centerX = containerWidth / 2;
+            const layerSpacing = 120;
+            const componentSpacing = 200;
+
+            architecture.layers.forEach((layer, layerIndex) => {
+                const layerY = layerIndex * layerSpacing + 50;
+                
+                layer.components.forEach((component, compIndex) => {
+                    const x = centerX - (layer.components.length - 1) * componentSpacing / 2 + compIndex * componentSpacing;
+                    const y = layerY;
+                    
+                    const compGroup = svg.append("g")
+                        .attr("class", "component-group")
+                        .attr("data-id", component.id);
+
+                    compGroup.append("rect")
+                        .attr("x", x - 80)
+                        .attr("y", y - 30)
+                        .attr("width", 160)
+                        .attr("height", 60)
+                        .attr("fill", layer.color)
+                        .attr("stroke", "#007bff")
+                        .attr("stroke-width", 2)
+                        .attr("rx", 8);
+
+                    compGroup.append("text")
+                        .attr("x", x)
+                        .attr("y", y)
+                        .attr("text-anchor", "middle")
+                        .attr("font-size", "11")
+                        .attr("font-weight", "bold")
+                        .attr("fill", "#333")
+                        .text(component.name);
+                });
+            });
+
+            if (showConnections) {
+                drawConnections(svg);
+            }
+        }
+
+        function drawDetailedView(svg) {
+            // More detailed view with all connections
+            drawLayeredView(svg);
+        }
+
+        function drawConnections(svg) {
+            const containerWidth = document.getElementById('diagramContainer').clientWidth;
+            const margin = 20;
+            const layerHeight = 100;
+            const componentWidth = 180;
+
+            architecture.connections.forEach(conn => {
+                const fromComp = findComponent(conn.from);
+                const toComp = findComponent(conn.to);
+                
+                if (!fromComp || !toComp) return;
+
+                const fromPos = getComponentPosition(fromComp, containerWidth, margin, layerHeight, componentWidth);
+                const toPos = getComponentPosition(toComp, containerWidth, margin, layerHeight, componentWidth);
+
+                const lineClass = conn.type === 'main' ? 'connection-line' : 
+                                 conn.type === 'observability' ? 'connection-line observability' : 
+                                 'connection-line infrastructure';
+
+                svg.append("line")
+                    .attr("x1", fromPos.x)
+                    .attr("y1", fromPos.y)
+                    .attr("x2", toPos.x)
+                    .attr("y2", toPos.y)
+                    .attr("class", lineClass);
+            });
+        }
+
+        function findComponent(id) {
+            for (let layer of architecture.layers) {
+                for (let component of layer.components) {
+                    if (component.id === id) {
+                        return { ...component, layer: layer };
+                    }
+                }
+            }
+            return null;
+        }
+
+        function getComponentPosition(component, containerWidth, margin, layerHeight, componentWidth) {
+            const layerIndex = architecture.layers.findIndex(l => l === component.layer);
+            const compIndex = component.layer.components.findIndex(c => c.id === component.id);
+            
+            const layerY = layerIndex * (layerHeight + 20) + 50;
+            const x = margin + 20 + compIndex * (componentWidth + 20) + componentWidth / 2;
+            const y = layerY + 40 + 40; // Center of component
+            
+            return { x, y };
+        }
+
+        function showTooltip(event, component) {
+            const tooltip = d3.select("body").selectAll(".tooltip").data([component]);
+            
+            tooltip.enter()
+                .append("div")
+                .attr("class", "tooltip")
+                .merge(tooltip)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px")
+                .html(`
+                    <strong>${component.name}</strong><br>
+                    ${component.desc}
+                `);
+        }
+
+        function hideTooltip() {
+            d3.selectAll(".tooltip").remove();
+        }
+
+        function downloadSVG() {
+            const svg = document.getElementById('architectureSVG');
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([svgData], {type: "image/svg+xml;charset=utf-8"});
+            const svgUrl = URL.createObjectURL(svgBlob);
+            
+            const downloadLink = document.createElement("a");
+            downloadLink.href = svgUrl;
+            downloadLink.download = "sasya-arogya-architecture.svg";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+
+        function downloadPNG() {
+            const svg = document.getElementById('architectureSVG');
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const img = new Image();
+            
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                
+                canvas.toBlob(function(blob) {
+                    const url = URL.createObjectURL(blob);
+                    const downloadLink = document.createElement("a");
+                    downloadLink.href = url;
+                    downloadLink.download = "sasya-arogya-architecture.png";
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                });
+            };
+            
+            img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+        }
+
+        function toggleConnections() {
+            showConnections = !showConnections;
+            initDiagram();
+        }
+
+        function changeView() {
+            currentView = document.getElementById('viewSelect').value;
+            initDiagram();
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            initDiagram();
+        };
+
+        // Handle window resize
+        window.onresize = function() {
+            initDiagram();
+        };
+    </script>
+</body>
+</html>

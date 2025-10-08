@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sasya Arogya Engine - Workflow State Machine</title>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dagre-d3@0.8.4/dist/dagre-d3.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .diagram-container {
+            padding: 30px;
+            min-height: 800px;
+            position: relative;
+        }
+        
+        .state {
+            fill: white;
+            stroke: #007bff;
+            stroke-width: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .state:hover {
+            fill: #e3f2fd;
+            stroke: #1976d2;
+            stroke-width: 3px;
+        }
+        
+        .state.start {
+            fill: #e8f5e8;
+            stroke: #4caf50;
+        }
+        
+        .state.end {
+            fill: #fce4ec;
+            stroke: #e91e63;
+        }
+        
+        .state.process {
+            fill: #fff3e0;
+            stroke: #ff9800;
+        }
+        
+        .state.service {
+            fill: #f3e5f5;
+            stroke: #9c27b0;
+        }
+        
+        .state.error {
+            fill: #ffebee;
+            stroke: #f44336;
+        }
+        
+        .state-label {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+        }
+        
+        .transition {
+            fill: none;
+            stroke: #007bff;
+            stroke-width: 2px;
+            marker-end: url(#arrowhead);
+        }
+        
+        .transition.main {
+            stroke: #1976d2;
+            stroke-width: 3px;
+        }
+        
+        .transition.alternative {
+            stroke: #4caf50;
+            stroke-width: 2px;
+            stroke-dasharray: 5,5;
+        }
+        
+        .transition.error {
+            stroke: #f44336;
+            stroke-width: 2px;
+        }
+        
+        .transition-label {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 10px;
+            fill: #333;
+            text-anchor: middle;
+            dominant-baseline: central;
+        }
+        
+        .legend {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 10px;
+            border: 2px solid #333;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 250px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .download-section {
+            padding: 20px;
+            background: #f8f9fa;
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+            }
+            
+            .legend {
+                position: static;
+                margin-top: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 LangGraph Workflow State Machine</h1>
+            <p>Finite State Machine for Agricultural Intelligence Platform</p>
+        </div>
+        
+        <div class="controls">
+            <div>
+                <button class="btn" onclick="downloadSVG()">📥 Download SVG</button>
+                <button class="btn btn-secondary" onclick="downloadPNG()">📥 Download PNG</button>
+                <button class="btn btn-secondary" onclick="toggleLabels()">🏷️ Toggle Labels</button>
+            </div>
+            <div>
+                <span>Layout: </span>
+                <select id="layoutSelect" onchange="changeLayout()">
+                    <option value="dagre">Auto Layout</option>
+                    <option value="manual">Manual Layout</option>
+                    <option value="hierarchical">Hierarchical</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="diagram-container" id="diagramContainer">
+            <svg id="workflowSVG" width="100%" height="800"></svg>
+        </div>
+        
+        <div class="legend">
+            <h4>State Types</h4>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e8f5e8; border-color: #4caf50;"></div>
+                <span>Start/End States</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fff3e0; border-color: #ff9800;"></div>
+                <span>Process States</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f3e5f5; border-color: #9c27b0;"></div>
+                <span>Service States</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ffebee; border-color: #f44336;"></div>
+                <span>Error States</span>
+            </div>
+            <hr>
+            <h4>Transitions</h4>
+            <div class="legend-item">
+                <div style="width: 20px; height: 2px; background: #1976d2; margin-right: 10px;"></div>
+                <span>Main Flow</span>
+            </div>
+            <div class="legend-item">
+                <div style="width: 20px; height: 2px; background: #4caf50; margin-right: 10px; border-top: 2px dashed #4caf50;"></div>
+                <span>Alternative Paths</span>
+            </div>
+            <div class="legend-item">
+                <div style="width: 20px; height: 2px; background: #f44336; margin-right: 10px;"></div>
+                <span>Error Paths</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Workflow data
+        const workflow = {
+            states: [
+                { id: 'START', name: 'START', type: 'start', x: 400, y: 50 },
+                { id: 'INITIAL', name: 'INITIAL', type: 'process', x: 400, y: 150 },
+                { id: 'CLASSIFYING', name: 'CLASSIFYING', type: 'process', x: 200, y: 250 },
+                { id: 'PRESCRIBING', name: 'PRESCRIBING', type: 'process', x: 400, y: 250 },
+                { id: 'INSURANCE', name: 'INSURANCE', type: 'service', x: 600, y: 250 },
+                { id: 'VENDOR_QUERY', name: 'VENDOR_QUERY', type: 'service', x: 200, y: 350 },
+                { id: 'SHOW_VENDORS', name: 'SHOW_VENDORS', type: 'service', x: 400, y: 350 },
+                { id: 'ORDER_BOOKING', name: 'ORDER_BOOKING', type: 'service', x: 600, y: 350 },
+                { id: 'FOLLOWUP', name: 'FOLLOWUP', type: 'process', x: 400, y: 450 },
+                { id: 'COMPLETED', name: 'COMPLETED', type: 'end', x: 200, y: 550 },
+                { id: 'ERROR', name: 'ERROR', type: 'error', x: 600, y: 550 },
+                { id: 'END', name: 'END', type: 'end', x: 400, y: 650 }
+            ],
+            transitions: [
+                { from: 'START', to: 'INITIAL', label: 'New Session', type: 'main' },
+                { from: 'INITIAL', to: 'CLASSIFYING', label: 'Image + Context', type: 'main' },
+                { from: 'INITIAL', to: 'FOLLOWUP', label: 'Missing Info', type: 'alternative' },
+                { from: 'INITIAL', to: 'ERROR', label: 'Invalid Input', type: 'error' },
+                { from: 'CLASSIFYING', to: 'PRESCRIBING', label: 'Disease Found', type: 'main' },
+                { from: 'CLASSIFYING', to: 'FOLLOWUP', label: 'Need More Info', type: 'alternative' },
+                { from: 'CLASSIFYING', to: 'ERROR', label: 'Classification Failed', type: 'error' },
+                { from: 'PRESCRIBING', to: 'INSURANCE', label: 'Treatment Ready', type: 'main' },
+                { from: 'PRESCRIBING', to: 'VENDOR_QUERY', label: 'User Wants Vendors', type: 'main' },
+                { from: 'PRESCRIBING', to: 'COMPLETED', label: 'No Further Action', type: 'alternative' },
+                { from: 'INSURANCE', to: 'VENDOR_QUERY', label: 'Premium Calculated', type: 'main' },
+                { from: 'INSURANCE', to: 'COMPLETED', label: 'Insurance Only', type: 'alternative' },
+                { from: 'VENDOR_QUERY', to: 'SHOW_VENDORS', label: 'User Confirms', type: 'main' },
+                { from: 'VENDOR_QUERY', to: 'COMPLETED', label: 'No Vendors', type: 'alternative' },
+                { from: 'SHOW_VENDORS', to: 'ORDER_BOOKING', label: 'Vendor Selected', type: 'main' },
+                { from: 'SHOW_VENDORS', to: 'COMPLETED', label: 'No Selection', type: 'alternative' },
+                { from: 'ORDER_BOOKING', to: 'FOLLOWUP', label: 'Order Placed', type: 'main' },
+                { from: 'ORDER_BOOKING', to: 'COMPLETED', label: 'Order Complete', type: 'alternative' },
+                { from: 'FOLLOWUP', to: 'INITIAL', label: 'New Request', type: 'main' },
+                { from: 'FOLLOWUP', to: 'CLASSIFYING', label: 'Reclassify', type: 'main' },
+                { from: 'FOLLOWUP', to: 'PRESCRIBING', label: 'Regenerate', type: 'main' },
+                { from: 'FOLLOWUP', to: 'COMPLETED', label: 'Session End', type: 'alternative' },
+                { from: 'ERROR', to: 'END', label: 'Session Terminated', type: 'error' },
+                { from: 'COMPLETED', to: 'END', label: 'Session Complete', type: 'main' }
+            ]
+        };
+
+        let showLabels = true;
+        let currentLayout = 'manual';
+
+        // Initialize the diagram
+        function initDiagram() {
+            const svg = d3.select("#workflowSVG");
+            svg.selectAll("*").remove();
+            
+            // Add arrow marker
+            svg.append("defs").append("marker")
+                .attr("id", "arrowhead")
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 8)
+                .attr("refY", 0)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .append("path")
+                .attr("d", "M0,-5L10,0L0,5")
+                .attr("fill", "#007bff");
+
+            if (currentLayout === 'dagre') {
+                drawDagreLayout(svg);
+            } else if (currentLayout === 'hierarchical') {
+                drawHierarchicalLayout(svg);
+            } else {
+                drawManualLayout(svg);
+            }
+        }
+
+        function drawManualLayout(svg) {
+            const containerWidth = document.getElementById('diagramContainer').clientWidth;
+            const containerHeight = 800;
+            
+            // Scale positions to fit container
+            const scaleX = (containerWidth - 200) / 800;
+            const scaleY = (containerHeight - 100) / 700;
+            
+            // Draw transitions first (so they appear behind states)
+            workflow.transitions.forEach(transition => {
+                const fromState = workflow.states.find(s => s.id === transition.from);
+                const toState = workflow.states.find(s => s.id === transition.to);
+                
+                if (!fromState || !toState) return;
+                
+                const fromX = fromState.x * scaleX + 100;
+                const fromY = fromState.y * scaleY + 50;
+                const toX = toState.x * scaleX + 100;
+                const toY = toState.y * scaleY + 50;
+                
+                // Calculate control points for curved transitions
+                const midX = (fromX + toX) / 2;
+                const midY = (fromY + toY) / 2;
+                const controlOffset = 50;
+                
+                let pathData;
+                if (Math.abs(fromX - toX) < 50) {
+                    // Vertical transition
+                    pathData = `M ${fromX} ${fromY} Q ${fromX + controlOffset} ${midY} ${toX} ${toY}`;
+                } else {
+                    // Curved transition
+                    pathData = `M ${fromX} ${fromY} Q ${midX} ${fromY - controlOffset} ${toX} ${toY}`;
+                }
+                
+                const path = svg.append("path")
+                    .attr("d", pathData)
+                    .attr("class", `transition ${transition.type}`)
+                    .attr("fill", "none");
+                
+                if (showLabels) {
+                    const labelX = midX;
+                    const labelY = midY - 10;
+                    
+                    svg.append("text")
+                        .attr("x", labelX)
+                        .attr("y", labelY)
+                        .attr("class", "transition-label")
+                        .text(transition.label);
+                }
+            });
+            
+            // Draw states
+            workflow.states.forEach(state => {
+                const x = state.x * scaleX + 100;
+                const y = state.y * scaleY + 50;
+                
+                const stateGroup = svg.append("g")
+                    .attr("class", "state-group")
+                    .attr("data-id", state.id);
+                
+                // State shape based on type
+                let shape;
+                if (state.type === 'start' || state.type === 'end') {
+                    shape = svg.append("circle")
+                        .attr("cx", x)
+                        .attr("cy", y)
+                        .attr("r", 30)
+                        .attr("class", `state ${state.type}`);
+                } else {
+                    shape = svg.append("rect")
+                        .attr("x", x - 50)
+                        .attr("y", y - 20)
+                        .attr("width", 100)
+                        .attr("height", 40)
+                        .attr("rx", 8)
+                        .attr("class", `state ${state.type}`);
+                }
+                
+                // State label
+                svg.append("text")
+                    .attr("x", x)
+                    .attr("y", y)
+                    .attr("class", "state-label")
+                    .text(state.name);
+                
+                // Add hover effects
+                stateGroup.on("mouseover", function() {
+                    showTooltip(d3.event, state);
+                }).on("mouseout", function() {
+                    hideTooltip();
+                });
+            });
+        }
+
+        function drawDagreLayout(svg) {
+            // Create a new directed graph
+            const g = new dagre.graphlib.Graph()
+                .setGraph({ rankdir: "TB", marginx: 20, marginy: 20 })
+                .setDefaultEdgeLabel(function() { return {}; });
+
+            // Add nodes
+            workflow.states.forEach(state => {
+                g.setNode(state.id, { 
+                    label: state.name, 
+                    width: 100, 
+                    height: 40,
+                    type: state.type 
+                });
+            });
+
+            // Add edges
+            workflow.transitions.forEach(transition => {
+                g.setEdge(transition.from, transition.to, { 
+                    label: showLabels ? transition.label : "",
+                    type: transition.type 
+                });
+            });
+
+            // Run the layout
+            dagre.layout(g);
+
+            // Draw the graph
+            const containerWidth = document.getElementById('diagramContainer').clientWidth;
+            const containerHeight = 800;
+            
+            // Center the graph
+            const graphWidth = g.graph().width;
+            const graphHeight = g.graph().height;
+            const offsetX = (containerWidth - graphWidth) / 2;
+            const offsetY = (containerHeight - graphHeight) / 2;
+
+            // Draw edges
+            g.edges().forEach(edge => {
+                const edgeData = g.edge(edge);
+                const path = d3.path();
+                path.moveTo(edgeData.points[0].x + offsetX, edgeData.points[0].y + offsetY);
+                for (let i = 1; i < edgeData.points.length; i++) {
+                    path.lineTo(edgeData.points[i].x + offsetX, edgeData.points[i].y + offsetY);
+                }
+                
+                svg.append("path")
+                    .attr("d", path.toString())
+                    .attr("class", `transition ${edgeData.type}`)
+                    .attr("fill", "none");
+                
+                if (edgeData.label) {
+                    const labelX = edgeData.x + offsetX;
+                    const labelY = edgeData.y + offsetY;
+                    
+                    svg.append("text")
+                        .attr("x", labelX)
+                        .attr("y", labelY)
+                        .attr("class", "transition-label")
+                        .text(edgeData.label);
+                }
+            });
+
+            // Draw nodes
+            g.nodes().forEach(nodeId => {
+                const node = g.node(nodeId);
+                const x = node.x + offsetX;
+                const y = node.y + offsetY;
+                
+                const stateGroup = svg.append("g")
+                    .attr("class", "state-group")
+                    .attr("data-id", nodeId);
+                
+                // State shape
+                let shape;
+                if (node.type === 'start' || node.type === 'end') {
+                    shape = svg.append("circle")
+                        .attr("cx", x)
+                        .attr("cy", y)
+                        .attr("r", 30)
+                        .attr("class", `state ${node.type}`);
+                } else {
+                    shape = svg.append("rect")
+                        .attr("x", x - node.width/2)
+                        .attr("y", y - node.height/2)
+                        .attr("width", node.width)
+                        .attr("height", node.height)
+                        .attr("rx", 8)
+                        .attr("class", `state ${node.type}`);
+                }
+                
+                // State label
+                svg.append("text")
+                    .attr("x", x)
+                    .attr("y", y)
+                    .attr("class", "state-label")
+                    .text(node.label);
+            });
+        }
+
+        function drawHierarchicalLayout(svg) {
+            // Simplified hierarchical layout
+            drawManualLayout(svg);
+        }
+
+        function showTooltip(event, state) {
+            const tooltip = d3.select("body").selectAll(".tooltip").data([state]);
+            
+            const descriptions = {
+                'START': 'Entry point for new user sessions',
+                'INITIAL': 'Context extraction and input validation',
+                'CLASSIFYING': 'CNN-based disease classification',
+                'PRESCRIBING': 'RAG-based treatment recommendations',
+                'INSURANCE': 'Premium calculation and policy generation',
+                'VENDOR_QUERY': 'User preference confirmation',
+                'SHOW_VENDORS': 'Display local vendors and pricing',
+                'ORDER_BOOKING': 'Process order with selected vendor',
+                'FOLLOWUP': 'Handle additional questions and navigation',
+                'COMPLETED': 'Session completion with summary',
+                'ERROR': 'Error handling and recovery',
+                'END': 'Session termination'
+            };
+            
+            tooltip.enter()
+                .append("div")
+                .attr("class", "tooltip")
+                .merge(tooltip)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px")
+                .html(`
+                    <strong>${state.name}</strong><br>
+                    ${descriptions[state.name] || 'State description'}
+                `);
+        }
+
+        function hideTooltip() {
+            d3.selectAll(".tooltip").remove();
+        }
+
+        function downloadSVG() {
+            const svg = document.getElementById('workflowSVG');
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([svgData], {type: "image/svg+xml;charset=utf-8"});
+            const svgUrl = URL.createObjectURL(svgBlob);
+            
+            const downloadLink = document.createElement("a");
+            downloadLink.href = svgUrl;
+            downloadLink.download = "sasya-arogya-workflow.svg";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+
+        function downloadPNG() {
+            const svg = document.getElementById('workflowSVG');
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const img = new Image();
+            
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                
+                canvas.toBlob(function(blob) {
+                    const url = URL.createObjectURL(blob);
+                    const downloadLink = document.createElement("a");
+                    downloadLink.href = url;
+                    downloadLink.download = "sasya-arogya-workflow.png";
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                });
+            };
+            
+            img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            initDiagram();
+        }
+
+        function changeLayout() {
+            currentLayout = document.getElementById('layoutSelect').value;
+            initDiagram();
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            initDiagram();
+        };
+
+        // Handle window resize
+        window.onresize = function() {
+            initDiagram();
+        };
+    </script>
+</body>
+</html>

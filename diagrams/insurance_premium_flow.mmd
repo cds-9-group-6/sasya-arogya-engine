@@ -1,0 +1,59 @@
+sequenceDiagram
+    participant U as 👤 User
+    participant I as 🌐 Initial Node
+    participant F as 🔄 Followup Node
+    participant IN as 🏦 Insurance Node
+    participant LLM as 🤖 LLM Service
+    participant IT as 🔧 Insurance Tool
+    participant MCP as 🏢 MCP Server
+    participant PC as 💰 Premium Calculator
+    participant GS as 🏛️ Government Subsidies
+    participant IC as 🏢 Insurance Companies
+    
+    Note over U,IC: Insurance Premium Calculation Flow
+    
+    U->>I: "What is the cost of premium for my wheat farm?"
+    I->>I: Check existing conversation
+    I->>F: Route to followup (continuing conversation)
+    
+    F->>LLM: Analyze insurance intent
+    Note over LLM: "insurance premium cost" → insurance action
+    LLM->>F: {"action": "insurance", "confidence": 0.95}
+    
+    F->>LLM: Analyze insurance sub-intent
+    Note over LLM: "cost of premium" → wants_insurance_premium: true
+    LLM->>F: {"wants_insurance_premium": true, ...}
+    
+    F->>IN: Route with user_intent set
+    IN->>IN: _determine_insurance_action()
+    Note over IN: Explicit intent → calculate_premium
+    
+    IN->>IN: _extract_insurance_context()
+    Note over IN: Extract: crop="wheat", area=2.5, state="Punjab"
+    
+    IN->>IT: calculate_premium(crop="wheat", area=2.5, state="Punjab")
+    IT->>IT: Prepare MCP payload
+    IT->>MCP: POST /tools/call
+    Note over MCP: {"name": "calculate_crop_premium", "arguments": {...}}
+    
+    MCP->>PC: Execute premium calculation
+    PC->>GS: Get subsidy rates for Punjab
+    GS->>PC: Subsidy: 40% for wheat
+    PC->>IC: Get premium rates for wheat
+    IC->>PC: Base rate: ₹15,000/hectare
+    
+    PC->>PC: Calculate total premium
+    Note over PC: Area × Base Rate = 2.5 × 15,000 = ₹37,500
+    
+    PC->>PC: Apply government subsidy
+    Note over PC: Farmer pays 25%, Govt pays 75%
+    
+    PC->>MCP: Return premium details
+    MCP->>IT: {"premium": "₹9,375", "subsidy": "75%", "total": "₹37,500"}
+    
+    IT->>IN: Premium calculation result
+    IN->>IN: Store results in state
+    IN->>U: Stream premium calculation results
+    Note over U: "🏦 Insurance Premium: ₹9,375 (Farmer) + ₹28,125 (Government)"
+    
+    IN->>IN: Set next_action = "completed"
