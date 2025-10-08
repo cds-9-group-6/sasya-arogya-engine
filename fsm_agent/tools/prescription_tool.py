@@ -162,7 +162,8 @@ class PrescriptionTool(BaseTool):
                 
                 # Extract response content
                 response_data = response.json()
-                
+                logger.info(f"Prescription Engine response: {response_data}")
+
                 # Check if the response was successful
                 if not response_data.get("success", False):
                     raise Exception(f"Prescription Engine returned unsuccessful response: {response_data}")
@@ -186,6 +187,7 @@ class PrescriptionTool(BaseTool):
                         logger.warning(f"Failed to log prescription success: {e}")
                 
                 logger.info(f"Prescription generated for {disease_name}")
+                logger.info(f"Prescription data: {prescription_data}")
                 return prescription_data
                 
             except Exception as e:
@@ -388,6 +390,9 @@ class PrescriptionTool(BaseTool):
             
             notes = ". ".join(notes_parts)
             
+            # Extract comments section
+            comments = treatment_data.get("comments", {})
+            
             return {
                 # Core data compatible with existing interface
                 "treatments": treatments,
@@ -400,6 +405,7 @@ class PrescriptionTool(BaseTool):
                 "season": kwargs.get("season"),
                 
                 # Extended structured data from new response
+                "comments": comments,  # Added comments section
                 "diagnosis": diagnosis,
                 "immediate_treatment": treatment_data.get("immediate_treatment", {}),
                 "weekly_treatment_plan": treatment_data.get("weekly_treatment_plan", {}),
