@@ -182,32 +182,24 @@ The certificate generation demonstrates the full power of the MCP integration:
    # Action: generate_certificate
    ```
 
-2. **Policy Data Generation**
+2. **Parameter Validation**
    ```python
-   # Generate unique policy identifiers
-   policy_id = f"POL-{uuid.uuid4().hex[:8].upper()}"
-   farmer_id = f"FID-{uuid.uuid4().hex[:6].upper()}"
-   
-   # Calculate insurance values
-   base_premium_per_hectare = 15000
-   total_sum_insured = area_hectare * base_premium_per_hectare * 3
+   # Validate required parameters
+   if not all([farmer_name, crop, area_hectare, state]):
+       raise ValueError("Missing required parameters")
    ```
 
 3. **MCP Certificate Generation**
    ```python
-   # Prepare comprehensive certificate data
+   # Prepare simplified certificate data
    certificate_payload = {
        "name": "generate_insurance_certificate",
        "arguments": {
-           "policy_id": policy_id,
            "farmer_name": farmer_name,
-           "crop_details": {
-               "name": crop,
-               "area_hectare": area_hectare,
-               "premium_paid_by_farmer": farmer_premium,
-               "premium_paid_by_govt": government_premium
-           },
-           "terms_and_conditions": [...]
+           "state": state,
+           "area_hectare": area_hectare,
+           "crop": crop,
+           "disease": disease
        }
    }
    ```

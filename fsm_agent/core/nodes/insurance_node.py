@@ -569,8 +569,12 @@ Respond with ONLY a JSON object:
                     message += f"**Policy ID:** {policy_id}\n"
                     message += f"**Coverage Area:** {result.get('area_hectare', 'N/A')} hectares\n"
                     
+                    # Include premium details if available
+                    if result.get("premium_details"):
+                        message += f"\n**Premium Details:**\n{result['premium_details']}"
+                    
                     if result.get("pdf_generated"):
-                        message += f"\n📄 **Your insurance certificate PDF has been generated and is ready for download.**"
+                        message += f"\n\n📄 **Your insurance certificate PDF has been generated and is ready for download.**"
                         if result.get("certificate_details"):
                             message += f"\n\n**Certificate Details:**\n{result['certificate_details']}"
                     else:
