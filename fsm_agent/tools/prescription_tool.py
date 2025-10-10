@@ -336,12 +336,14 @@ class PrescriptionTool(BaseTool):
             primary = medicine_recs.get("primary_treatment", {})
             if primary:
                 treatments.append({
-                    "name": primary.get("medicine_name", "Unknown Medicine"),
-                    "type": "Chemical",
-                    "application": primary.get("application_method", "As directed"),
-                    "dosage": primary.get("dosage", "As per label"),
-                    "frequency": primary.get("frequency", "As needed"),
-                    "duration": primary.get("duration", "Until improvement"),
+                    "name": primary.get("medicine_name", ""),
+                    "active_ingredient": primary.get("active_ingredient", ""),
+                    "type": primary.get("medicine_type", "Chemical"),
+                    "application": primary.get("application_method", ""),
+                    "dosage": primary.get("dosage", ""),
+                    "frequency": primary.get("frequency", ""),
+                    "duration": primary.get("duration", ""),
+                    "when_to_use": primary.get("when_to_use", ""),
                     "precautions": primary.get("precautions", [])
                 })
             
@@ -349,25 +351,45 @@ class PrescriptionTool(BaseTool):
             secondary = medicine_recs.get("secondary_treatment", {})
             if secondary:
                 treatments.append({
-                    "name": secondary.get("medicine_name", "Secondary Medicine"),
-                    "type": "Chemical",
-                    "application": secondary.get("application_method", "As directed"),
-                    "dosage": secondary.get("dosage", "As per label"),
-                    "frequency": secondary.get("frequency", "As needed"),
-                    "duration": secondary.get("duration", "Until improvement"),
-                    "when_to_use": secondary.get("when_to_use")
+                    "name": secondary.get("medicine_name", ""),
+                    "active_ingredient": secondary.get("active_ingredient", ""),
+                    "type": secondary.get("medicine_type", "Chemical"),
+                    "application": secondary.get("application_method", ""),
+                    "dosage": secondary.get("dosage", ""),
+                    "frequency": secondary.get("frequency", ""),
+                    "duration": secondary.get("duration", ""),
+                    "when_to_use": secondary.get("when_to_use", ""),
+                    "precautions": secondary.get("precautions", [])
+                    
                 })
             
             # Add organic alternatives
             organic_alts = medicine_recs.get("organic_alternatives", [])
             for organic in organic_alts:
                 treatments.append({
-                    "name": organic.get("name", "Organic Treatment"),
-                    "type": "Organic",
-                    "application": organic.get("application", "As directed"),
-                    "dosage": organic.get("preparation", "As per instructions"),
-                    "frequency": "As needed"
+                    "name": organic.get("medicine_name", ""),
+                    "active_ingredient": organic.get("active_ingredient", ""),
+                    "type": organic.get("medicine_type", "Organic"),
+                    "application": organic.get("application_method", ""),
+                    "dosage": organic.get("dosage", ""),
+                    "frequency": organic.get("frequency", ""),
+                    "duration": organic.get("duration", ""),
+                    "when_to_use": organic.get("when_to_use", ""),
+                    "precautions": organic.get("precautions", [])
                 })
+            
+            # Remove empty key-value pairs from each treatment
+            cleaned_treatments = []
+            seen_names = set()
+            for treatment in treatments:
+                # Remove keys with empty values
+                cleaned = {k: v for k, v in treatment.items() if v not in ("", [], None)}
+                name = cleaned.get("name", "")
+                # Avoid duplicate by 'name'
+                if name and name not in seen_names:
+                    cleaned_treatments.append(cleaned)
+                    seen_names.add(name)
+            treatments = cleaned_treatments
             
             # Extract prevention measures
             prevention = treatment_data.get("prevention", {})
