@@ -330,87 +330,32 @@ class InsuranceTool(BaseTool):
             return {"error": f"Insurance recommendation failed: {str(e)}"}
     
     def _generate_certificate(self, **kwargs) -> Dict[str, Any]:
-        """Generate insurance certificate PDF"""
+        """Generate insurance certificate PDF via MCP server"""
         try:
-            from datetime import datetime, timedelta
-            import uuid
-            
-            # Extract farmer information
+            # Extract required parameters
             farmer_name = kwargs.get("farmer_name", "Farmer")
             crop = kwargs.get("crop")
             area_hectare = kwargs.get("area_hectare")
             state = kwargs.get("state")
+            disease = kwargs.get("disease")
             
-            # Generate certificate details with defaults
-            policy_id = f"POL-{uuid.uuid4().hex[:8].upper()}"
-            farmer_id = f"FID-{uuid.uuid4().hex[:6].upper()}"
-            cut_off_date = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
-            
-            # Calculate insurance values (mock calculation based on area)
-            base_premium_per_hectare = 15000  # ₹15,000 per hectare
-            sum_insured_per_hectare = base_premium_per_hectare * 3  # ₹45,000 per hectare
-            total_sum_insured = sum_insured_per_hectare * area_hectare
-            
-            # Premium calculations with government subsidy
-            total_premium = area_hectare * base_premium_per_hectare
-            govt_subsidy_percent = 75  # 75% government subsidy
-            farmer_share_percent = 25   # 25% farmer contribution
-            
-            premium_paid_by_govt = total_premium * (govt_subsidy_percent / 100)
-            premium_paid_by_farmer = total_premium * (farmer_share_percent / 100)
-            
-            # Default insurance company details
-            insurance_companies = {
-                "Maharashtra": "Maharashtra State Insurance Company",
-                "Punjab": "Punjab Agricultural Insurance Corporation", 
-                "Tamil Nadu": "Tamil Nadu Crop Insurance Ltd",
-                "Gujarat": "Gujarat Insurance Corporation",
-                "Uttar Pradesh": "UP Agricultural Insurance Co.",
-                "Haryana": "Haryana Crop Insurance Agency",
-                "Karnataka": "Karnataka State Insurance",
-                "Andhra Pradesh": "AP Agricultural Insurance Corp"
-            }
-            
-            company_name = insurance_companies.get(state, "National Agricultural Insurance Scheme")
-            company_address = f"Head Office, {state} State, India"
-            
-            # Standard terms and conditions
-            terms_and_conditions = [
-                "This policy covers crop loss due to natural calamities",
-                "Coverage includes drought, flood, cyclone, and pest attacks", 
-                "Claims must be reported within 48 hours of damage",
-                "Assessment will be conducted by certified agricultural officers",
-                "Premium payment is due before crop sowing season",
-                "Policy is valid for one crop season only",
-                "Sum insured cannot exceed the actual crop value",
-                "Losses due to negligence or willful damage are not covered"
-            ]
+            # Validate required parameters
+            if not all([farmer_name, crop, area_hectare, state]):
+                raise ValueError("Missing required parameters: farmer_name, crop, area_hectare, state")
             
             # Prepare MCP tool call payload
             mcp_payload = {
                 "name": "generate_insurance_certificate",
                 "arguments": {
-                    "policy_id": policy_id,
                     "farmer_name": farmer_name,
-                    "farmer_id": farmer_id,
-                    "insurance_company_name": company_name,
-                    "company_address": company_address,
-                    "sum_insured_per_hectare": sum_insured_per_hectare,
-                    "farmer_share_percent": farmer_share_percent,
-                    "actuarial_rate_percent": 12.5,  # Standard actuarial rate
-                    "cut_off_date": cut_off_date,
-                    "crop_details": {
-                        "name": crop,
-                        "area_hectare": area_hectare,
-                        "premium_paid_by_farmer": premium_paid_by_farmer,
-                        "premium_paid_by_govt": premium_paid_by_govt,
-                        "total_sum_insured": total_sum_insured
-                    },
-                    "terms_and_conditions": terms_and_conditions
+                    "state": state,
+                    "area_hectare": area_hectare,
+                    "crop": crop,
+                    "disease": disease
                 }
             }
             
-            logger.info(f"🔍 Generating insurance certificate via MCP server for farmer: {farmer_name}, policy: {policy_id}")
+            logger.info(f"🔍 Generating insurance certificate via MCP server for farmer: {farmer_name}, crop: {crop}, state: {state}")
             
             # Make HTTP request to MCP server
             response = requests.post(
@@ -437,34 +382,41 @@ class InsuranceTool(BaseTool):
             result = {
                 "action": "generate_certificate",
                 "success": True,
-                "policy_id": policy_id,
                 "farmer_name": farmer_name,
-                "farmer_id": farmer_id,
                 "crop": crop,
                 "area_hectare": area_hectare,
                 "state": state,
-                "company_name": company_name,
-                "premium_paid_by_farmer": premium_paid_by_farmer,
-                "premium_paid_by_govt": premium_paid_by_govt,
-                "total_sum_insured": total_sum_insured,
+                "disease": disease,
                 "pdf_generated": False,
-                "certificate_details": f"Policy ID: {policy_id}\nCompany: {company_name}\nPremium: ₹{premium_paid_by_farmer:,.2f} (Farmer) + ₹{premium_paid_by_govt:,.2f} (Government)\nCoverage: ₹{total_sum_insured:,.2f}",
+                "premium_details": "",  # Initialize premium_details
                 "raw_mcp_response": mcp_response
             }
             
-            # Process both text and PDF resources
+            # Process both text and PDF resources from MCP response
             for item in content:
                 if item.get("type") == "text":
                     # Include any additional text response from the server
                     result["server_response"] = item["text"]
+                    # Extract premium details from text response if available
+                    if "premium" in item["text"].lower() or "₹" in item["text"]:
+                        result["premium_details"] = item["text"]
                 elif item.get("type") == "resource":
                     if item.get("mimeType") == "application/pdf":
                         result["pdf_generated"] = True
                         result["pdf_uri"] = item.get("uri")
-                        result["pdf_name"] = item.get("name", f"insurance_certificate_{policy_id}.pdf")
+                        result["pdf_name"] = item.get("name", f"insurance_certificate_{farmer_name}_{crop}.pdf")
                         # Calculate approximate size
                         if item.get("uri"):
                             result["pdf_size"] = len(item["uri"].encode()) if isinstance(item["uri"], str) else 0
+                    
+                    # Extract premium details from resource metadata or description
+                    resource_text = item.get("text", "") or item.get("description", "") or item.get("name", "")
+                    if resource_text and ("premium" in resource_text.lower() or "₹" in resource_text):
+                        result["premium_details"] = resource_text
+            
+            # If no premium details found, provide a fallback message
+            if not result["premium_details"]:
+                result["premium_details"] = f"Premium details for {crop} in {state} - Contact insurance provider for specific rates"
             
             return result
                 
