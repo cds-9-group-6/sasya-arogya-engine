@@ -48,7 +48,7 @@ class SasyaArogyaEngineTester:
         return f"fsm_session_{timestamp}"
     
     async def _make_request(self, message: str, image_b64: Optional[str] = None) -> Dict[str, Any]:
-        """Make HTTP request to the engine"""
+        """Make HTTP request to the engine and parse SSE stream"""
         url = f"{self.base_url}/sasya-chikitsa/chat-stream"
         payload = {
             "message": message,
@@ -59,21 +59,92 @@ class SasyaArogyaEngineTester:
             payload["image_b64"] = image_b64
             
         try:
-            # Set timeout for the entire request
-            timeout = aiohttp.ClientTimeout(total=30, connect=10)
+            # Set timeout for the entire request (increased for streaming)
+            timeout = aiohttp.ClientTimeout(total=60, connect=10)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, json=payload) as response:
                     if response.status == 200:
-                        return await response.json()
+                        return await self._parse_sse_stream(response)
                     else:
-                        logger.error(f"HTTP {response.status}: {await response.text()}")
+                        error_text = await response.text()
+                        logger.error(f"HTTP {response.status}: {error_text}")
                         return {"error": f"HTTP {response.status}"}
         except asyncio.TimeoutError:
-            logger.error("Request timed out after 30 seconds")
+            logger.error("Request timed out after 60 seconds")
             return {"error": "Request timeout"}
         except Exception as e:
             logger.error(f"Request failed: {str(e)}")
             return {"error": str(e)}
+    
+    async def _parse_sse_stream(self, response) -> Dict[str, Any]:
+        """Parse Server-Sent Events stream and extract meaningful data"""
+        accumulated_data = {
+            "messages": [],
+            "state": None,
+            "session_id": self.session_id,
+            "classification_results": None,
+            "prescription_data": None,
+            "response": "",  # Final assistant response
+            "success": False
+        }
+        
+        current_event = None
+        
+        try:
+            async for line in response.content:
+                line = line.decode('utf-8').strip()
+                
+                if line.startswith('event: '):
+                    current_event = line[7:]  # Remove 'event: '
+                    
+                elif line.startswith('data: '):
+                    data_content = line[6:]  # Remove 'data: '
+                    
+                    # Skip [DONE] marker
+                    if data_content == '[DONE]':
+                        accumulated_data["success"] = True
+                        break
+                        
+                    # Try to parse as JSON
+                    try:
+                        data_json = json.loads(data_content)
+                        
+                        # Extract based on event type
+                        if current_event == 'state_update':
+                            if 'state' in data_json:
+                                accumulated_data["state"] = data_json["state"]
+                            if 'classification_results' in data_json:
+                                accumulated_data["classification_results"] = data_json["classification_results"]
+                            if 'prescription_data' in data_json:
+                                accumulated_data["prescription_data"] = data_json["prescription_data"]
+                            if 'messages' in data_json:
+                                accumulated_data["messages"] = data_json["messages"]
+                                
+                        elif current_event == 'assistant_response':
+                            # This is the main response content
+                            if 'message' in data_json:
+                                accumulated_data["response"] = data_json["message"]
+                            elif 'response' in data_json:
+                                accumulated_data["response"] = data_json["response"]
+                            elif isinstance(data_json, str):
+                                accumulated_data["response"] = data_json
+                                
+                        elif current_event == 'error':
+                            return {"error": data_json.get("error", "Unknown error")}
+                            
+                    except json.JSONDecodeError:
+                        # If not JSON, treat as plain text response
+                        if current_event == 'assistant_response' or not accumulated_data["response"]:
+                            accumulated_data["response"] += data_content + " "
+        
+        except Exception as e:
+            logger.error(f"Error parsing SSE stream: {str(e)}")
+            return {"error": f"SSE parsing error: {str(e)}"}
+        
+        # Clean up response
+        accumulated_data["response"] = accumulated_data["response"].strip()
+        
+        return accumulated_data
     
     def _load_test_image(self, image_path: str) -> Optional[str]:
         """Load and encode test image"""
